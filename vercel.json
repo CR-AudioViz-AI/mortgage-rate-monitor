@@ -1,8 +1,44 @@
 {
+  "version": 2,
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_anon_key"
+    }
+  },
+  "env": {
+    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_key",
+    "FRED_API_KEY": "@fred_api_key",
+    "RESEND_API_KEY": "@resend_api_key",
+    "CRON_SECRET": "@cron_secret"
+  },
   "crons": [
     {
-      "path": "/api/cron",
-      "schedule": "0 * * * *"
+      "path": "/api/mortgage/alerts/check",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/mortgage/rates/sync",
+      "schedule": "0 2 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "X-Requested-With, Content-Type, Authorization, X-API-Key"
+        }
+      ]
     }
   ]
 }
