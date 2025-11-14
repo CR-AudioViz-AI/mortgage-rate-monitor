@@ -1,0 +1,409 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Javari AI Mortgage Rate Monitoring API",
+    "version": "1.0.0",
+    "description": "Professional mortgage rate monitoring API with real-time data, historical analytics, and email alerts. Built by CR AudioViz AI, LLC.",
+    "contact": {
+      "name": "CR AudioViz AI Support",
+      "email": "support@craudiovizai.com",
+      "url": "https://craudiovizai.com"
+    },
+    "license": {
+      "name": "Proprietary",
+      "url": "https://craudiovizai.com/terms"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://javari-ai.vercel.app",
+      "description": "Production server"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "Development server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Rates",
+      "description": "Current and historical mortgage rate data"
+    },
+    {
+      "name": "Alerts",
+      "description": "Email alert management"
+    },
+    {
+      "name": "API Keys",
+      "description": "API key management and authentication"
+    }
+  ],
+  "paths": {
+    "/api/mortgage/rates": {
+      "get": {
+        "tags": ["Rates"],
+        "summary": "Get current mortgage rates",
+        "description": "Fetches the latest mortgage rates from FRED API for 30-year fixed, 15-year fixed, and 5/1 ARM products.",
+        "security": [{"ApiKeyAuth": []}, {"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {"type": "boolean"},
+                    "rates": {
+                      "type": "object",
+                      "properties": {
+                        "30y_fixed": {"type": "number"},
+                        "15y_fixed": {"type": "number"},
+                        "5_1_arm": {"type": "number"}
+                      }
+                    },
+                    "updated_at": {"type": "string", "format": "date-time"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid API key"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    },
+    "/api/mortgage/rates/historical": {
+      "get": {
+        "tags": ["Rates"],
+        "summary": "Get historical mortgage rates",
+        "description": "Retrieves historical mortgage rate data with trend analysis and statistics.",
+        "security": [{"ApiKeyAuth": []}, {"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "rate_type",
+            "in": "query",
+            "description": "Type of mortgage rate",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["30y_fixed", "15y_fixed", "5_1_arm"],
+              "default": "30y_fixed"
+            }
+          },
+          {
+            "name": "interval",
+            "in": "query",
+            "description": "Data sampling interval",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["daily", "weekly", "monthly"],
+              "default": "daily"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "description": "Number of days to retrieve (1-3650)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3650,
+              "default": 365
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with historical data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {"type": "boolean"},
+                    "rate_type": {"type": "string"},
+                    "interval": {"type": "string"},
+                    "days": {"type": "integer"},
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date": {"type": "string", "format": "date"},
+                          "rate": {"type": "number"}
+                        }
+                      }
+                    },
+                    "statistics": {
+                      "type": "object",
+                      "properties": {
+                        "min": {"type": "number"},
+                        "max": {"type": "number"},
+                        "mean": {"type": "number"},
+                        "median": {"type": "number"},
+                        "stdDev": {"type": "number"},
+                        "volatility": {"type": "number"}
+                      }
+                    },
+                    "trends": {
+                      "type": "object",
+                      "properties": {
+                        "30d": {"type": "object"},
+                        "90d": {"type": "object"},
+                        "365d": {"type": "object"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mortgage/alerts": {
+      "get": {
+        "tags": ["Alerts"],
+        "summary": "List all alerts",
+        "description": "Retrieves all active rate alerts for the authenticated user.",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "List of alerts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {"type": "boolean"},
+                    "alerts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {"type": "string", "format": "uuid"},
+                          "rate_type": {"type": "string"},
+                          "threshold": {"type": "number"},
+                          "condition": {"type": "string", "enum": ["above", "below"]},
+                          "email": {"type": "string", "format": "email"},
+                          "is_active": {"type": "boolean"},
+                          "created_at": {"type": "string", "format": "date-time"}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Alerts"],
+        "summary": "Create new alert",
+        "description": "Creates a new rate alert that will trigger email notifications when conditions are met. Maximum 10 active alerts per user.",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["rate_type", "threshold", "condition", "email"],
+                "properties": {
+                  "rate_type": {
+                    "type": "string",
+                    "enum": ["30y_fixed", "15y_fixed", "5_1_arm"]
+                  },
+                  "threshold": {
+                    "type": "number",
+                    "minimum": 0,
+                    "example": 6.50
+                  },
+                  "condition": {
+                    "type": "string",
+                    "enum": ["above", "below"]
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Alert created successfully"
+          },
+          "400": {
+            "description": "Invalid input or limit reached"
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Alerts"],
+        "summary": "Update existing alert",
+        "description": "Updates an existing rate alert's threshold, condition, email, or active status.",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["alert_id"],
+                "properties": {
+                  "alert_id": {"type": "string", "format": "uuid"},
+                  "threshold": {"type": "number"},
+                  "condition": {"type": "string", "enum": ["above", "below"]},
+                  "email": {"type": "string", "format": "email"},
+                  "is_active": {"type": "boolean"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Alert updated successfully"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Alerts"],
+        "summary": "Delete alert",
+        "description": "Soft deletes a rate alert by setting is_active to false.",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "alert_id",
+            "in": "query",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Alert deleted successfully"
+          }
+        }
+      }
+    },
+    "/api/mortgage/keys": {
+      "get": {
+        "tags": ["API Keys"],
+        "summary": "List API keys",
+        "description": "Retrieves all API keys for the authenticated user.",
+        "security": [{"BearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "List of API keys"
+          }
+        }
+      },
+      "post": {
+        "tags": ["API Keys"],
+        "summary": "Create API key",
+        "description": "Generates a new API key with specified rate limit. Maximum 5 active keys per user.",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "rate_limit"],
+                "properties": {
+                  "name": {"type": "string", "example": "Production API Key"},
+                  "rate_limit": {
+                    "type": "integer",
+                    "enum": [10, 100, 1000, 10000],
+                    "description": "Requests per day"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "API key created successfully. Key is only shown once."
+          }
+        }
+      },
+      "delete": {
+        "tags": ["API Keys"],
+        "summary": "Revoke API key",
+        "description": "Revokes an API key by setting is_active to false.",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "key_id",
+            "in": "query",
+            "required": true,
+            "schema": {"type": "string", "format": "uuid"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "API key revoked successfully"
+          }
+        }
+      }
+    },
+    "/api/mortgage/keys/usage": {
+      "get": {
+        "tags": ["API Keys"],
+        "summary": "Get API usage statistics",
+        "description": "Retrieves usage statistics and analytics for API keys.",
+        "security": [{"BearerAuth": []}],
+        "parameters": [
+          {
+            "name": "key_id",
+            "in": "query",
+            "required": false,
+            "schema": {"type": "string", "format": "uuid"},
+            "description": "Filter by specific API key"
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {"type": "integer", "default": 30, "minimum": 1, "maximum": 365},
+            "description": "Number of days to retrieve"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usage statistics"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "API key for programmatic access. Format: crav_mortgage_xxxxx"
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Supabase JWT token for user authentication"
+      }
+    }
+  }
+}
