@@ -1,32 +1,16 @@
 {
-  "version": 2,
   "crons": [
     {
-      "path": "/api/mortgage/alerts/check",
+      "path": "/api/scrape/lenders",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/alerts/check",
       "schedule": "0 */6 * * *"
     },
     {
-      "path": "/api/mortgage/rates/sync",
-      "schedule": "0 2 * * *"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "X-Requested-With, Content-Type, Authorization, X-API-Key"
-        }
-      ]
+      "path": "/api/rates/sync",
+      "schedule": "0 */12 * * *"
     }
   ]
 }
