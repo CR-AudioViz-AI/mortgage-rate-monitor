@@ -1,7 +1,7 @@
 {
   "name": "javari-mortgage-rate-monitor",
   "version": "3.0.0",
-  "description": "Javari AI Mortgage Rate Monitoring System - Phases 3B, 3C, 3D Complete",
+  "description": "Javari AI Mortgage Rate Monitoring System - Full Interactive Frontend",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -14,7 +14,8 @@
     "next": "14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "@supabase/supabase-js": "^2.45.0"
+    "@supabase/supabase-js": "^2.45.0",
+    "recharts": "^2.10.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -31,4 +32,3 @@
     "node": ">=18.17.0"
   }
 }
-
