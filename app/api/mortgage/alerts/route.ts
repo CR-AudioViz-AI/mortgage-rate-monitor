@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const alertCount = existingAlerts || 0;
+    const alertCount = existingAlerts?.length || 0;
     if (alertCount >= 10) {
       return NextResponse.json(
         { error: 'Maximum alert limit reached (10 active alerts)' },
@@ -377,3 +377,4 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
+
