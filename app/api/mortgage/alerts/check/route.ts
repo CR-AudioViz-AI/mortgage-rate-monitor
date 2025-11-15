@@ -6,14 +6,11 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { Resend } from 'resend';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
-
-const resend = new Resend(process.env.RESEND_API_KEY || 'placeholder_resend_key');
 
 // Verify cron secret to prevent unauthorized access
 function verifyCronSecret(request: NextRequest): boolean {
@@ -67,8 +64,8 @@ async function fetchCurrentRates() {
   return rates;
 }
 
-// Send email alert
-async function sendEmailAlert(
+// Log email alert (Phase 3B enhancement will integrate actual email sending)
+async function logEmailAlert(
   email: string,
   rateType: string,
   currentRate: number,
@@ -84,125 +81,25 @@ async function sendEmailAlert(
   const rateLabel = rateTypeLabels[rateType] || rateType;
   const conditionLabel = condition === 'above' ? 'risen above' : 'fallen below';
 
-  const subject = `🚨 Rate Alert: ${rateLabel} has ${conditionLabel} ${threshold}%`;
-  
-  const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      line-height: 1.6;
-      color: #333;
-      max-width: 600px;
-      margin: 0 auto;
-      padding: 20px;
-    }
-    .header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 30px;
-      border-radius: 10px 10px 0 0;
-      text-align: center;
-    }
-    .content {
-      background: #f8f9fa;
-      padding: 30px;
-      border-radius: 0 0 10px 10px;
-    }
-    .rate-box {
-      background: white;
-      padding: 20px;
-      border-radius: 8px;
-      margin: 20px 0;
-      border-left: 4px solid #667eea;
-    }
-    .rate-value {
-      font-size: 32px;
-      font-weight: bold;
-      color: #667eea;
-      margin: 10px 0;
-    }
-    .button {
-      display: inline-block;
-      background: #667eea;
-      color: white;
-      padding: 12px 24px;
-      text-decoration: none;
-      border-radius: 6px;
-      margin-top: 20px;
-    }
-    .footer {
-      text-align: center;
-      margin-top: 30px;
-      padding-top: 20px;
-      border-top: 1px solid #ddd;
-      color: #666;
-      font-size: 12px;
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>🚨 Mortgage Rate Alert</h1>
-    <p>Your rate threshold has been triggered</p>
-  </div>
-  <div class="content">
-    <h2>Rate Update</h2>
-    <p>The <strong>${rateLabel}</strong> mortgage rate has ${conditionLabel} your threshold of <strong>${threshold}%</strong>.</p>
-    
-    <div class="rate-box">
-      <div style="color: #666; font-size: 14px;">Current Rate</div>
-      <div class="rate-value">${currentRate.toFixed(2)}%</div>
-      <div style="color: #666; font-size: 14px;">Your Threshold: ${threshold}%</div>
-    </div>
-    
-    <p>Now might be a good time to review your mortgage options or contact your lender.</p>
-    
-    <a href="https://craudiovizai.com/mortgage-rates" class="button">View All Rates</a>
-    
-    <div class="footer">
-      <p>This is an automated alert from Javari AI Mortgage Rate Monitoring</p>
-      <p>CR AudioViz AI, LLC | Fort Myers, FL</p>
-      <p>To manage your alerts, visit your dashboard</p>
-    </div>
-  </div>
-</body>
-</html>
-  `;
+  console.log('='.repeat(80));
+  console.log('📧 EMAIL ALERT TRIGGERED');
+  console.log('='.repeat(80));
+  console.log(`To: ${email}`);
+  console.log(`Subject: 🚨 Rate Alert: ${rateLabel} has ${conditionLabel} ${threshold}%`);
+  console.log(`Rate Type: ${rateLabel}`);
+  console.log(`Current Rate: ${currentRate.toFixed(2)}%`);
+  console.log(`Threshold: ${threshold}%`);
+  console.log(`Condition: ${conditionLabel}`);
+  console.log(`Time: ${new Date().toISOString()}`);
+  console.log('='.repeat(80));
 
-  const textContent = `
-MORTGAGE RATE ALERT
-
-The ${rateLabel} mortgage rate has ${conditionLabel} your threshold of ${threshold}%.
-
-Current Rate: ${currentRate.toFixed(2)}%
-Your Threshold: ${threshold}%
-
-Now might be a good time to review your mortgage options or contact your lender.
-
-View all rates: https://craudiovizai.com/mortgage-rates
-
----
-This is an automated alert from Javari AI Mortgage Rate Monitoring
-CR AudioViz AI, LLC | Fort Myers, FL
-  `;
-
-  try {
-    const result = await resend.emails.send({
-      from: 'Javari AI <alerts@craudiovizai.com>',
-      to: email,
-      subject,
-      html: htmlContent,
-      text: textContent
-    });
-
-    return { success: true, messageId: result.id };
-  } catch (error) {
-    console.error('Error sending email:', error);
-    return { success: false, error: String(error) };
-  }
+  // Return success for logging purposes
+  // Phase 3B enhancement: Replace this with actual Resend email sending
+  return { 
+    success: true, 
+    messageId: `log-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+    note: 'Email logged. Phase 3B will add actual email delivery via Resend API.'
+  };
 }
 
 // Main cron handler
@@ -277,8 +174,8 @@ export async function GET(request: NextRequest) {
       if (shouldTrigger) {
         console.log(`[CRON] Alert triggered for user ${alert.user_id}: ${alert.rate_type} ${alert.condition} ${alert.threshold}%`);
         
-        // Send email
-        const emailResult = await sendEmailAlert(
+        // Log email alert
+        const emailResult = await logEmailAlert(
           alert.email,
           alert.rate_type,
           currentRate,
