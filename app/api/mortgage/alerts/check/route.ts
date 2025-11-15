@@ -12,6 +12,14 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// Type for email alert result
+type EmailAlertResult = {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+  note?: string;
+};
+
 // Verify cron secret to prevent unauthorized access
 function verifyCronSecret(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization');
@@ -29,8 +37,8 @@ function verifyCronSecret(request: NextRequest): boolean {
 async function fetchCurrentRates() {
   const fredApiKey = process.env.FRED_API_KEY || 'placeholder_fred_key';
   
-  const rates: any = {};
-  const rateSeriesMap = {
+  const rates: Record<string, { rate: number; date: string }> = {};
+  const rateSeriesMap: Record<string, string> = {
     '30y_fixed': 'MORTGAGE30US',
     '15y_fixed': 'MORTGAGE15US',
     '5_1_arm': 'MORTGAGE5US'
@@ -71,8 +79,8 @@ async function logEmailAlert(
   currentRate: number,
   threshold: number,
   condition: string
-) {
-  const rateTypeLabels: any = {
+): Promise<EmailAlertResult> {
+  const rateTypeLabels: Record<string, string> = {
     '30y_fixed': '30-Year Fixed',
     '15y_fixed': '15-Year Fixed',
     '5_1_arm': '5/1 ARM'
@@ -195,7 +203,7 @@ export async function GET(request: NextRequest) {
             current_rate: currentRate,
             triggered_at: new Date().toISOString(),
             email_sent: emailResult.success,
-            email_error: emailResult.error || null
+            email_error: emailResult.error ?? null
           });
 
         if (logError) {
