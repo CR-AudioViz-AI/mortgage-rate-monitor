@@ -1,107 +1,198 @@
-// Javari AI Mortgage Rate Monitor - Interactive Homepage
-// Created: 2025-11-15
-// Roy Henderson, CEO @ CR AudioViz AI, LLC
-
 'use client';
 
 import { useState, useEffect } from 'react';
-import CurrentRates from '@/components/CurrentRates';
-import EmailAlertForm from '@/components/EmailAlertForm';
-import HistoricalChart from '@/components/HistoricalChart';
-import APIKeyGenerator from '@/components/APIKeyGenerator';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'rates' | 'alerts' | 'history' | 'api'>('rates');
+  const [rates, setRates] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    fetchRates();
+  }, []);
+  
+  const fetchRates = async () => {
+    try {
+      const res = await fetch('/api/mortgage/rates');
+      if (res.ok) {
+        const data = await res.json();
+        setRates(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch rates:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
-      {/* Header */}
-      <header className="bg-white shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                🏠 Javari AI Mortgage Monitor
-              </h1>
-              <p className="text-sm text-gray-600 mt-1">
-                Real-time mortgage rates powered by AI
-              </p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-8">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+            🏠 Mortgage Rate Monitor
+          </h1>
+          <p className="text-gray-600">
+            Real-time mortgage rates and alerts
+          </p>
+        </div>
+
+        {/* Current Rates */}
+        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Current Rates</h2>
+          
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <p className="mt-4 text-gray-600">Loading rates...</p>
             </div>
-            <div className="text-right text-sm text-gray-500">
-              <p>CR AudioViz AI, LLC</p>
-              <p>Roy Henderson, CEO</p>
+          ) : rates ? (
+            <div className="grid md:grid-cols-3 gap-6">
+              {rates.rates?.map((rate: any) => (
+                <div key={rate.rate_type} className="bg-gray-50 rounded-lg p-6">
+                  <h3 className="font-semibold text-gray-900 mb-2">{rate.rate_type}</h3>
+                  <div className="text-3xl font-bold text-blue-600 mb-2">
+                    {rate.current_rate.toFixed(3)}%
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    Previous: {rate.previous_rate.toFixed(3)}%
+                  </div>
+                  <div className={`text-sm font-medium ${
+                    rate.change_percent > 0 ? 'text-red-600' : 
+                    rate.change_percent < 0 ? 'text-green-600' : 'text-gray-600'
+                  }`}>
+                    {rate.change_percent > 0 ? '↑' : rate.change_percent < 0 ? '↓' : '→'} 
+                    {Math.abs(rate.change_percent).toFixed(2)}%
+                  </div>
+                </div>
+              ))}
             </div>
+          ) : (
+            <p className="text-gray-600">Unable to load rates. Please check API connection.</p>
+          )}
+        </div>
+
+        {/* Email Alert Form */}
+        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">Email Alerts</h2>
+          <EmailAlertForm />
+        </div>
+
+        {/* API Info */}
+        <div className="bg-gray-900 text-white rounded-xl shadow-lg p-8">
+          <h2 className="text-2xl font-bold mb-4">API Endpoints</h2>
+          <div className="space-y-2 font-mono text-sm">
+            <div><span className="text-green-400">GET</span> /api/mortgage/rates</div>
+            <div><span className="text-blue-400">POST</span> /api/mortgage/alerts</div>
+            <div><span className="text-green-400">GET</span> /api/mortgage/rates/historical</div>
           </div>
         </div>
-      </header>
-
-      {/* Navigation Tabs */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
-        <div className="bg-white rounded-lg shadow-md p-2 flex gap-2">
-          <button
-            onClick={() => setActiveTab('rates')}
-            className={`flex-1 px-4 py-3 rounded-md font-medium transition-colors ${
-              activeTab === 'rates'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            📊 Current Rates
-          </button>
-          <button
-            onClick={() => setActiveTab('alerts')}
-            className={`flex-1 px-4 py-3 rounded-md font-medium transition-colors ${
-              activeTab === 'alerts'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            📧 Email Alerts
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`flex-1 px-4 py-3 rounded-md font-medium transition-colors ${
-              activeTab === 'history'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            📈 Historical Data
-          </button>
-          <button
-            onClick={() => setActiveTab('api')}
-            className={`flex-1 px-4 py-3 rounded-md font-medium transition-colors ${
-              activeTab === 'api'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            🔑 API Access
-          </button>
-        </div>
       </div>
-
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pb-12">
-        {activeTab === 'rates' && <CurrentRates />}
-        {activeTab === 'alerts' && <EmailAlertForm />}
-        {activeTab === 'history' && <HistoricalChart />}
-        {activeTab === 'api' && <APIKeyGenerator />}
-      </div>
-
-      {/* Footer */}
-      <footer className="bg-gray-900 text-white mt-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="text-center">
-            <p className="text-sm">
-              © 2025 CR AudioViz AI, LLC | Built with Next.js 14, Supabase, and Vercel
-            </p>
-            <p className="text-xs text-gray-400 mt-2">
-              Production Ready | Phase 3 Complete
-            </p>
-          </div>
-        </div>
-      </footer>
     </div>
+  );
+}
+
+function EmailAlertForm() {
+  const [email, setEmail] = useState('');
+  const [rateType, setRateType] = useState('30Y Fixed');
+  const [threshold, setThreshold] = useState('');
+  const [direction, setDirection] = useState('below');
+  const [message, setMessage] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage('');
+    
+    try {
+      const res = await fetch('/api/mortgage/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          rate_type: rateType,
+          threshold_rate: parseFloat(threshold),
+          direction
+        })
+      });
+      
+      if (res.ok) {
+        setMessage('✅ Alert created successfully!');
+        setEmail('');
+        setThreshold('');
+      } else {
+        setMessage('❌ Failed to create alert');
+      }
+    } catch (err) {
+      setMessage('❌ Error: ' + String(err));
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+        <input
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          placeholder="you@example.com"
+        />
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Rate Type</label>
+        <select
+          value={rateType}
+          onChange={(e) => setRateType(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+        >
+          <option>30Y Fixed</option>
+          <option>15Y Fixed</option>
+          <option>5/1 ARM</option>
+        </select>
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Target Rate (%)</label>
+        <input
+          type="number"
+          required
+          step="0.001"
+          value={threshold}
+          onChange={(e) => setThreshold(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="6.500"
+        />
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Alert When</label>
+        <select
+          value={direction}
+          onChange={(e) => setDirection(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="below">Rate goes below target</option>
+          <option value="above">Rate goes above target</option>
+        </select>
+      </div>
+      
+      <button
+        type="submit"
+        className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+      >
+        Create Alert
+      </button>
+      
+      {message && (
+        <div className={`p-4 rounded-lg ${
+          message.includes('✅') ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+        }`}>
+          {message}
+        </div>
+      )}
+    </form>
   );
 }
