@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -12,34 +14,19 @@ export async function GET(request: NextRequest) {
     const lenderId = searchParams.get('lender_id');
     const range = searchParams.get('range') || '30d';
 
-    // Calculate date range
     const now = new Date();
     let startDate = new Date();
     
     switch (range) {
-      case '7d':
-        startDate.setDate(now.getDate() - 7);
-        break;
-      case '30d':
-        startDate.setDate(now.getDate() - 30);
-        break;
-      case '90d':
-        startDate.setDate(now.getDate() - 90);
-        break;
-      case '1y':
-        startDate.setFullYear(now.getFullYear() - 1);
-        break;
-      case '5y':
-        startDate.setFullYear(now.getFullYear() - 5);
-        break;
-      case 'all':
-        startDate = new Date('2000-01-01');
-        break;
-      default:
-        startDate.setDate(now.getDate() - 30);
+      case '7d': startDate.setDate(now.getDate() - 7); break;
+      case '30d': startDate.setDate(now.getDate() - 30); break;
+      case '90d': startDate.setDate(now.getDate() - 90); break;
+      case '1y': startDate.setFullYear(now.getFullYear() - 1); break;
+      case '5y': startDate.setFullYear(now.getFullYear() - 5); break;
+      case 'all': startDate = new Date('2000-01-01'); break;
+      default: startDate.setDate(now.getDate() - 30);
     }
 
-    // Query historical rates
     let query = supabase
       .from('rate_history')
       .select('*')
@@ -57,7 +44,6 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
-    // Group by date and aggregate rates
     const groupedData: Record<string, any> = {};
 
     historyData?.forEach((record) => {
@@ -74,14 +60,12 @@ export async function GET(request: NextRequest) {
         };
       }
 
-      // Add rates to corresponding arrays
       if (record.term_years === 30) {
         groupedData[date].rate_30y.push(record.rate);
       } else if (record.term_years === 15) {
         groupedData[date].rate_15y.push(record.rate);
       }
 
-      // Categorize by loan type
       if (record.loan_type === 'fha') {
         groupedData[date].rate_fha.push(record.rate);
       } else if (record.loan_type === 'va') {
@@ -91,7 +75,6 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Calculate averages
     const data = Object.values(groupedData).map((day: any) => ({
       date: day.date,
       rate_30y: day.rate_30y.length > 0 
