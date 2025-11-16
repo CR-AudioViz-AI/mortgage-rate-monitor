@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -10,8 +10,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Area,
-  AreaChart,
 } from 'recharts';
 
 interface RateData {
@@ -25,38 +23,41 @@ interface RateData {
 
 interface HistoricalRateChartProps {
   lenderId?: string;
-  timeRange?: '7d' | '30d' | '90d' | '1y' | '5y' | 'all';
-  showComparison?: boolean;
+  range?: '7d' | '30d' | '90d' | '1y' | '5y' | 'all';
 }
 
 export default function HistoricalRateChart({
   lenderId,
-  timeRange = '30d',
-  showComparison = false,
+  range = '30d',
 }: HistoricalRateChartProps) {
   const [data, setData] = useState<RateData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedMetrics, setSelectedMetrics] = useState<string[]>([
-    'rate_30y',
-    'rate_15y',
-  ]);
+  const [selectedRange, setSelectedRange] = useState(range);
+  const [visibleLines, setVisibleLines] = useState({
+    rate_30y: true,
+    rate_15y: true,
+    rate_fha: false,
+    rate_va: false,
+    rate_arm: false,
+  });
 
   useEffect(() => {
     fetchHistoricalData();
-  }, [lenderId, timeRange]);
+  }, [selectedRange, lenderId]);
 
   const fetchHistoricalData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      const params = new URLSearchParams();
-      if (lenderId) params.append('lender_id', lenderId);
-      params.append('range', timeRange);
+    try {
+      const params = new URLSearchParams({
+        range: selectedRange,
+        ...(lenderId && { lender_id: lenderId }),
+      });
 
       const response = await fetch(`/api/mortgage/historical?${params}`);
-
+      
       if (!response.ok) {
         throw new Error('Failed to fetch historical data');
       }
@@ -64,54 +65,30 @@ export default function HistoricalRateChart({
       const result = await response.json();
       setData(result.data || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-      console.error('Error fetching historical data:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
   };
 
+  const toggleLine = (key: keyof typeof visibleLines) => {
+    setVisibleLines((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    });
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
   const formatRate = (value: number) => {
     return `${value.toFixed(3)}%`;
   };
 
-  const metricColors: Record<string, string> = {
-    rate_30y: '#3b82f6',
-    rate_15y: '#10b981',
-    rate_fha: '#f59e0b',
-    rate_va: '#8b5cf6',
-    rate_arm: '#ef4444',
-  };
-
-  const metricLabels: Record<string, string> = {
-    rate_30y: '30-Year Fixed',
-    rate_15y: '15-Year Fixed',
-    rate_fha: 'FHA',
-    rate_va: 'VA',
-    rate_arm: '5/1 ARM',
-  };
-
-  const toggleMetric = (metric: string) => {
-    setSelectedMetrics((prev) =>
-      prev.includes(metric)
-        ? prev.filter((m) => m !== metric)
-        : [...prev, metric]
-    );
-  };
-
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="bg-white rounded-lg shadow-lg p-6">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
+          <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
           <div className="h-64 bg-gray-200 rounded"></div>
         </div>
       </div>
@@ -120,192 +97,183 @@ export default function HistoricalRateChart({
 
   if (error) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="bg-white rounded-lg shadow-lg p-6">
         <div className="text-red-600">
-          <p className="font-semibold">Error loading chart</p>
+          <p className="font-semibold">Error loading chart data</p>
           <p className="text-sm">{error}</p>
         </div>
       </div>
     );
   }
 
-  if (data.length === 0) {
-    return (
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <p className="text-gray-500">No historical data available</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className="bg-white rounded-lg shadow-lg p-6">
+      {/* Header */}
       <div className="mb-6">
-        <h3 className="text-xl font-bold text-gray-900 mb-2">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">
           Historical Mortgage Rates
-        </h3>
-        <p className="text-sm text-gray-600">
-          {lenderId
-            ? 'Lender-specific rate trends'
-            : 'National average rate trends'}
-        </p>
-      </div>
+        </h2>
 
-      {/* Time Range Selector */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {['7d', '30d', '90d', '1y', '5y', 'all'].map((range) => (
-          <button
-            key={range}
-            onClick={() => fetchHistoricalData()}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              timeRange === range
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {range === '7d'
-              ? '7 Days'
-              : range === '30d'
-              ? '30 Days'
-              : range === '90d'
-              ? '90 Days'
-              : range === '1y'
-              ? '1 Year'
-              : range === '5y'
-              ? '5 Years'
-              : 'All Time'}
-          </button>
-        ))}
-      </div>
-
-      {/* Metric Toggles */}
-      <div className="flex flex-wrap gap-3 mb-6">
-        {Object.entries(metricLabels).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => toggleMetric(key)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-              selectedMetrics.includes(key)
-                ? 'text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-            style={{
-              backgroundColor: selectedMetrics.includes(key)
-                ? metricColors[key]
-                : undefined,
-            }}
-          >
-            {label}
-          </button>
-        ))}
+        {/* Range Selector */}
+        <div className="flex flex-wrap gap-2">
+          {[
+            { value: '7d', label: '7 Days' },
+            { value: '30d', label: '30 Days' },
+            { value: '90d', label: '90 Days' },
+            { value: '1y', label: '1 Year' },
+            { value: '5y', label: '5 Years' },
+            { value: 'all', label: 'All Time' },
+          ].map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => setSelectedRange(value as typeof selectedRange)}
+              className={`px-4 py-2 rounded-lg font-medium transition ${
+                selectedRange === value
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Chart */}
-      <ResponsiveContainer width="100%" height={400}>
-        <AreaChart
-          data={data}
-          margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-        >
-          <defs>
-            {Object.entries(metricColors).map(([key, color]) => (
-              <linearGradient
-                key={key}
-                id={`color${key}`}
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop offset="5%" stopColor={color} stopOpacity={0.3} />
-                <stop offset="95%" stopColor={color} stopOpacity={0} />
-              </linearGradient>
-            ))}
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-          <XAxis
-            dataKey="date"
-            tickFormatter={formatDate}
-            stroke="#6b7280"
-            style={{ fontSize: '12px' }}
-          />
-          <YAxis
-            tickFormatter={(value) => `${value}%`}
-            stroke="#6b7280"
-            style={{ fontSize: '12px' }}
-          />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: '#ffffff',
-              border: '1px solid #e5e7eb',
-              borderRadius: '8px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-            }}
-            formatter={(value: number) => formatRate(value)}
-            labelFormatter={(label) =>
-              new Date(label).toLocaleDateString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-              })
-            }
-          />
-          <Legend
-            wrapperStyle={{ paddingTop: '20px' }}
-            formatter={(value) => metricLabels[value] || value}
-          />
-          {selectedMetrics.map((metric) => (
-            <Area
-              key={metric}
-              type="monotone"
-              dataKey={metric}
-              stroke={metricColors[metric]}
-              strokeWidth={2}
-              fill={`url(#color${metric})`}
-              name={metric}
+      <div className="mb-6">
+        <ResponsiveContainer width="100%" height={400}>
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey="date"
+              tickFormatter={formatDate}
+              tick={{ fontSize: 12 }}
             />
-          ))}
-        </AreaChart>
-      </ResponsiveContainer>
+            <YAxis
+              tickFormatter={(value) => `${value}%`}
+              tick={{ fontSize: 12 }}
+              domain={['auto', 'auto']}
+            />
+            <Tooltip
+              formatter={(value: number) => formatRate(value)}
+              labelFormatter={(label) => `Date: ${label}`}
+            />
+            <Legend />
 
-      {/* Statistics */}
-      <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-        {selectedMetrics.map((metric) => {
-          const values = data.map((d) => d[metric as keyof RateData]);
-          const latest = values[values.length - 1] as number;
-          const previous = values[values.length - 2] as number;
-          const change = latest - previous;
-          const min = Math.min(...(values as number[]));
-          const max = Math.max(...(values as number[]));
+            {visibleLines.rate_30y && (
+              <Line
+                type="monotone"
+                dataKey="rate_30y"
+                stroke="#3b82f6"
+                strokeWidth={2}
+                name="30-Year Fixed"
+                dot={false}
+              />
+            )}
 
-          return (
-            <div
-              key={metric}
-              className="bg-gray-50 rounded-lg p-3 border border-gray-200"
-            >
-              <div className="text-xs text-gray-600 mb-1">
-                {metricLabels[metric]}
-              </div>
-              <div className="text-lg font-bold text-gray-900">
-                {formatRate(latest)}
-              </div>
-              <div
-                className={`text-xs font-medium ${
-                  change > 0
-                    ? 'text-red-600'
-                    : change < 0
-                    ? 'text-green-600'
-                    : 'text-gray-600'
-                }`}
-              >
-                {change > 0 ? '↑' : change < 0 ? '↓' : '—'}{' '}
-                {Math.abs(change).toFixed(3)}%
-              </div>
-              <div className="text-xs text-gray-500 mt-2">
-                Range: {formatRate(min)} - {formatRate(max)}
-              </div>
-            </div>
-          );
-        })}
+            {visibleLines.rate_15y && (
+              <Line
+                type="monotone"
+                dataKey="rate_15y"
+                stroke="#10b981"
+                strokeWidth={2}
+                name="15-Year Fixed"
+                dot={false}
+              />
+            )}
+
+            {visibleLines.rate_fha && (
+              <Line
+                type="monotone"
+                dataKey="rate_fha"
+                stroke="#f59e0b"
+                strokeWidth={2}
+                name="FHA"
+                dot={false}
+              />
+            )}
+
+            {visibleLines.rate_va && (
+              <Line
+                type="monotone"
+                dataKey="rate_va"
+                stroke="#8b5cf6"
+                strokeWidth={2}
+                name="VA"
+                dot={false}
+              />
+            )}
+
+            {visibleLines.rate_arm && (
+              <Line
+                type="monotone"
+                dataKey="rate_arm"
+                stroke="#ef4444"
+                strokeWidth={2}
+                name="ARM"
+                dot={false}
+              />
+            )}
+          </LineChart>
+        </ResponsiveContainer>
       </div>
+
+      {/* Legend Controls */}
+      <div className="flex flex-wrap gap-4">
+        {[
+          { key: 'rate_30y', label: '30-Year Fixed', color: 'bg-blue-600' },
+          { key: 'rate_15y', label: '15-Year Fixed', color: 'bg-green-600' },
+          { key: 'rate_fha', label: 'FHA', color: 'bg-yellow-600' },
+          { key: 'rate_va', label: 'VA', color: 'bg-purple-600' },
+          { key: 'rate_arm', label: 'ARM', color: 'bg-red-600' },
+        ].map(({ key, label, color }) => (
+          <button
+            key={key}
+            onClick={() => toggleLine(key as keyof typeof visibleLines)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition ${
+              visibleLines[key as keyof typeof visibleLines]
+                ? 'border-gray-800 bg-gray-50'
+                : 'border-gray-300 bg-white opacity-50'
+            }`}
+          >
+            <div className={`w-4 h-4 rounded-full ${color}`}></div>
+            <span className="font-medium text-gray-900">{label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Stats */}
+      {data.length > 0 && (
+        <div className="mt-6 grid grid-cols-2 md:grid-cols-5 gap-4">
+          {[
+            { key: 'rate_30y', label: '30-Year' },
+            { key: 'rate_15y', label: '15-Year' },
+            { key: 'rate_fha', label: 'FHA' },
+            { key: 'rate_va', label: 'VA' },
+            { key: 'rate_arm', label: 'ARM' },
+          ].map(({ key, label }) => {
+            const latestRate = data[data.length - 1][key as keyof RateData];
+            const previousRate = data[0][key as keyof RateData];
+            const change = Number(latestRate) - Number(previousRate);
+            
+            return (
+              <div key={key} className="bg-gray-50 rounded-lg p-4">
+                <div className="text-sm text-gray-600 mb-1">{label}</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {formatRate(Number(latestRate))}
+                </div>
+                <div
+                  className={`text-sm font-medium ${
+                    change > 0 ? 'text-red-600' : 'text-green-600'
+                  }`}
+                >
+                  {change > 0 ? '↑' : '↓'} {Math.abs(change).toFixed(3)}%
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
