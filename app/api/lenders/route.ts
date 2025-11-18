@@ -1,6 +1,6 @@
 // CR AudioViz AI - Mortgage Rate Monitor
 // API: Get Lenders with STATE FILTERING
-// Fixed v3: Simplified approach - November 18, 2025 11:38 AM EST
+// Fixed v4: Detailed error logging - November 18, 2025 11:43 AM EST
 
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
@@ -27,6 +27,8 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
+    console.log('[API] Request params:', { state, lenderType, loanType, term, minRating, sortBy, limit, offset });
+
     // STEP 1: Get all lenders
     let lenderQuery = supabase
       .from('lenders')
@@ -44,12 +46,14 @@ export async function GET(request: NextRequest) {
     const { data: lenders, error: lenderError } = await lenderQuery;
 
     if (lenderError) {
-      console.error('Error fetching lenders:', lenderError);
+      console.error('[API] Error fetching lenders:', lenderError);
       return NextResponse.json(
-        { error: 'Failed to fetch lenders', details: lenderError.message },
+        { error: 'Failed to fetch lenders', details: lenderError.message, code: lenderError.code },
         { status: 500 }
       );
     }
+
+    console.log('[API] Fetched lenders:', lenders?.length || 0);
 
     if (!lenders || lenders.length === 0) {
       return NextResponse.json({
@@ -65,32 +69,59 @@ export async function GET(request: NextRequest) {
     let filteredLenders = lenders;
     
     if (state) {
+      console.log('[API] Filtering by state:', state);
       const stateUpper = state.toUpperCase();
       
-      // Get all service areas for this state
-      const { data: serviceAreas, error: serviceError } = await supabase
-        .from('lender_service_areas')
-        .select('lender_id')
-        .eq('state', stateUpper)
-        .eq('active', true);
+      try {
+        // Get all service areas for this state
+        const { data: serviceAreas, error: serviceError } = await supabase
+          .from('lender_service_areas')
+          .select('lender_id')
+          .eq('state', stateUpper)
+          .eq('active', true);
 
-      if (serviceError) {
-        console.error('Error fetching service areas:', serviceError);
+        if (serviceError) {
+          console.error('[API] Error fetching service areas:', serviceError);
+          return NextResponse.json(
+            { 
+              error: 'Failed to fetch service areas', 
+              details: serviceError.message, 
+              code: serviceError.code,
+              hint: serviceError.hint || 'Check if lender_service_areas table exists'
+            },
+            { status: 500 }
+          );
+        }
+
+        console.log('[API] Service areas found for', state, ':', serviceAreas?.length || 0);
+
+        // Get lender IDs that serve this state
+        const lenderIdsInState = new Set(
+          serviceAreas?.map(area => area.lender_id) || []
+        );
+
+        console.log('[API] Lender IDs in state:', lenderIdsInState.size);
+
+        // Filter: include national lenders + lenders that serve this state
+        filteredLenders = lenders.filter(lender => {
+          const isNational = lender.lender_type === 'national';
+          const servesState = lenderIdsInState.has(lender.id);
+          return isNational || servesState;
+        });
+
+        console.log('[API] Filtered lenders:', filteredLenders.length);
+
+      } catch (stateFilterError) {
+        console.error('[API] Exception during state filtering:', stateFilterError);
         return NextResponse.json(
-          { error: 'Failed to fetch service areas', details: serviceError.message },
+          { 
+            error: 'Exception during state filtering',
+            message: stateFilterError instanceof Error ? stateFilterError.message : 'Unknown',
+            stack: stateFilterError instanceof Error ? stateFilterError.stack : undefined
+          },
           { status: 500 }
         );
       }
-
-      // Get lender IDs that serve this state
-      const lenderIdsInState = new Set(
-        serviceAreas?.map(area => area.lender_id) || []
-      );
-
-      // Filter: include national lenders + lenders that serve this state
-      filteredLenders = lenders.filter(lender => {
-        return lender.lender_type === 'national' || lenderIdsInState.has(lender.id);
-      });
     }
 
     // STEP 3: Get mortgage rates for filtered lenders
@@ -112,9 +143,11 @@ export async function GET(request: NextRequest) {
     const { data: rates, error: ratesError } = await ratesQuery;
 
     if (ratesError) {
-      console.error('Error fetching rates:', ratesError);
+      console.error('[API] Error fetching rates (non-fatal):', ratesError);
       // Don't fail - just continue without rates
     }
+
+    console.log('[API] Rates fetched:', rates?.length || 0);
 
     // STEP 4: Attach rates to lenders and calculate lowest
     const ratesByLender = new Map();
@@ -178,6 +211,8 @@ export async function GET(request: NextRequest) {
     // STEP 6: Paginate
     const paginatedLenders = sortedLenders.slice(offset, offset + limit);
 
+    console.log('[API] Returning', paginatedLenders.length, 'lenders out of', filteredLenders.length);
+
     return NextResponse.json({
       data: paginatedLenders,
       count: filteredLenders.length,
@@ -194,7 +229,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('[API] Top-level exception:', error);
     return NextResponse.json(
       { 
         error: 'Internal server error',
