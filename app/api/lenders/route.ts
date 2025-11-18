@@ -1,6 +1,6 @@
 // CR AudioViz AI - Mortgage Rate Monitor
-// API: Get Lenders with STATE FILTERING  
-// Fixed v2: November 18, 2025 11:33 AM EST
+// API: Get Lenders with STATE FILTERING
+// Fixed v3: Simplified approach - November 18, 2025 11:38 AM EST
 
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
@@ -10,7 +10,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Required for API routes
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -18,7 +17,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     
-    // Filters
+    // Extract filters
     const lenderType = searchParams.get('type');
     const state = searchParams.get('state');
     const loanType = searchParams.get('loan_type');
@@ -28,38 +27,31 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    // Build base query
-    let query = supabase
+    // STEP 1: Get all lenders
+    let lenderQuery = supabase
       .from('lenders')
-      .select(`
-        *,
-        lender_service_areas(state),
-        mortgage_rates(base_rate, apr, points, loan_type, term)
-      `)
+      .select('*')
       .eq('active', true);
 
-    // Apply lender type filter
     if (lenderType) {
-      query = query.eq('lender_type', lenderType);
+      lenderQuery = lenderQuery.eq('lender_type', lenderType);
     }
 
-    // Apply minimum rating filter
     if (minRating) {
-      query = query.gte('rating', parseFloat(minRating));
+      lenderQuery = lenderQuery.gte('rating', parseFloat(minRating));
     }
 
-    // Execute query
-    const { data: allLenders, error: fetchError } = await query;
+    const { data: lenders, error: lenderError } = await lenderQuery;
 
-    if (fetchError) {
-      console.error('Error fetching lenders:', fetchError);
+    if (lenderError) {
+      console.error('Error fetching lenders:', lenderError);
       return NextResponse.json(
-        { error: 'Failed to fetch lenders', details: fetchError.message },
+        { error: 'Failed to fetch lenders', details: lenderError.message },
         { status: 500 }
       );
     }
 
-    if (!allLenders) {
+    if (!lenders || lenders.length === 0) {
       return NextResponse.json({
         data: [],
         count: 0,
@@ -69,71 +61,98 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // STATE FILTERING LOGIC
-    let filteredLenders = allLenders;
+    // STEP 2: If state filter, get service areas separately
+    let filteredLenders = lenders;
     
     if (state) {
       const stateUpper = state.toUpperCase();
-      filteredLenders = allLenders.filter(lender => {
-        // National lenders serve ALL states
-        if (lender.lender_type === 'national') {
-          return true;
-        }
-        
-        // Regional/state lenders - check service areas
-        if (lender.lender_service_areas && Array.isArray(lender.lender_service_areas)) {
-          return lender.lender_service_areas.some(
-            (area: { state: string }) => area.state === stateUpper
-          );
-        }
-        
-        return false;
+      
+      // Get all service areas for this state
+      const { data: serviceAreas, error: serviceError } = await supabase
+        .from('lender_service_areas')
+        .select('lender_id')
+        .eq('state', stateUpper)
+        .eq('active', true);
+
+      if (serviceError) {
+        console.error('Error fetching service areas:', serviceError);
+        return NextResponse.json(
+          { error: 'Failed to fetch service areas', details: serviceError.message },
+          { status: 500 }
+        );
+      }
+
+      // Get lender IDs that serve this state
+      const lenderIdsInState = new Set(
+        serviceAreas?.map(area => area.lender_id) || []
+      );
+
+      // Filter: include national lenders + lenders that serve this state
+      filteredLenders = lenders.filter(lender => {
+        return lender.lender_type === 'national' || lenderIdsInState.has(lender.id);
       });
     }
 
-    // LOAN TYPE & TERM FILTERING
-    if (loanType || term) {
-      filteredLenders = filteredLenders.map(lender => {
-        if (!lender.mortgage_rates || !Array.isArray(lender.mortgage_rates)) {
-          return lender;
-        }
+    // STEP 3: Get mortgage rates for filtered lenders
+    const lenderIds = filteredLenders.map(l => l.id);
+    
+    let ratesQuery = supabase
+      .from('mortgage_rates')
+      .select('*')
+      .in('lender_id', lenderIds);
 
-        let rates = lender.mortgage_rates;
-        
-        if (loanType) {
-          rates = rates.filter((r: any) => r.loan_type === loanType);
-        }
-        
-        if (term) {
-          rates = rates.filter((r: any) => r.term === term);
-        }
-
-        return { ...lender, mortgage_rates: rates };
-      });
+    if (loanType) {
+      ratesQuery = ratesQuery.eq('loan_type', loanType);
     }
 
-    // CALCULATE LOWEST RATES
+    if (term) {
+      ratesQuery = ratesQuery.eq('term', term);
+    }
+
+    const { data: rates, error: ratesError } = await ratesQuery;
+
+    if (ratesError) {
+      console.error('Error fetching rates:', ratesError);
+      // Don't fail - just continue without rates
+    }
+
+    // STEP 4: Attach rates to lenders and calculate lowest
+    const ratesByLender = new Map();
+    (rates || []).forEach(rate => {
+      if (!ratesByLender.has(rate.lender_id)) {
+        ratesByLender.set(rate.lender_id, []);
+      }
+      ratesByLender.get(rate.lender_id).push(rate);
+    });
+
     const lendersWithRates = filteredLenders.map(lender => {
+      const lenderRates = ratesByLender.get(lender.id) || [];
+      
       let lowestRate = null;
       let lowestApr = null;
 
-      if (lender.mortgage_rates && Array.isArray(lender.mortgage_rates)) {
-        const validRates = lender.mortgage_rates
-          .filter((r: any) => r.base_rate != null)
-          .map((r: any) => parseFloat(r.base_rate));
+      if (lenderRates.length > 0) {
+        const validRates = lenderRates
+          .filter(r => r.base_rate != null)
+          .map(r => parseFloat(r.base_rate));
         
-        const validAprs = lender.mortgage_rates
-          .filter((r: any) => r.apr != null)
-          .map((r: any) => parseFloat(r.apr));
+        const validAprs = lenderRates
+          .filter(r => r.apr != null)
+          .map(r => parseFloat(r.apr));
 
         if (validRates.length > 0) lowestRate = Math.min(...validRates);
         if (validAprs.length > 0) lowestApr = Math.min(...validAprs);
       }
 
-      return { ...lender, lowest_rate: lowestRate, lowest_apr: lowestApr };
+      return {
+        ...lender,
+        mortgage_rates: lenderRates,
+        lowest_rate: lowestRate,
+        lowest_apr: lowestApr
+      };
     });
 
-    // SORTING
+    // STEP 5: Sort
     let sortedLenders = [...lendersWithRates];
     
     if (sortBy === 'rating') {
@@ -156,17 +175,11 @@ export async function GET(request: NextRequest) {
       sortedLenders.sort((a, b) => (b.review_count || 0) - (a.review_count || 0));
     }
 
-    // PAGINATION
+    // STEP 6: Paginate
     const paginatedLenders = sortedLenders.slice(offset, offset + limit);
 
-    // CLEAN RESPONSE (remove service_areas array)
-    const cleanLenders = paginatedLenders.map(lender => {
-      const { lender_service_areas, ...rest } = lender;
-      return rest;
-    });
-
     return NextResponse.json({
-      data: cleanLenders,
+      data: paginatedLenders,
       count: filteredLenders.length,
       limit,
       offset,
@@ -185,7 +198,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { 
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
       },
       { status: 500 }
     );
