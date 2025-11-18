@@ -1,6 +1,6 @@
 // CR AudioViz AI - Mortgage Rate Monitor
-// API: Get Lenders with STATE FILTERING
-// Fixed: November 18, 2025 11:28 AM EST
+// API: Get Lenders with STATE FILTERING  
+// Fixed v2: November 18, 2025 11:33 AM EST
 
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
@@ -10,7 +10,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Required for API routes that use external APIs
+// Required for API routes
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -19,33 +19,23 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     
     // Filters
-    const lenderType = searchParams.get('type'); // national, state, regional
-    const state = searchParams.get('state'); // State code (FL, CA, TX, etc)
-    const loanType = searchParams.get('loan_type'); // conventional, fha, va, usda, jumbo
-    const term = searchParams.get('term'); // 30Y, 15Y, 10Y
-    const minRating = searchParams.get('min_rating'); // Minimum rating (0-5)
-    const sortBy = searchParams.get('sort') || 'rating'; // rating, name, rate
+    const lenderType = searchParams.get('type');
+    const state = searchParams.get('state');
+    const loanType = searchParams.get('loan_type');
+    const term = searchParams.get('term');
+    const minRating = searchParams.get('min_rating');
+    const sortBy = searchParams.get('sort') || 'rating';
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    // CRITICAL: State filtering logic
-    // If state is provided, we need to show:
-    // 1. ALL national lenders (they serve everywhere)
-    // 2. Regional/state lenders that serve this specific state
-    
+    // Build base query
     let query = supabase
       .from('lenders')
       .select(`
         *,
-        lender_service_areas!left(state),
-        mortgage_rates(
-          base_rate,
-          apr,
-          points,
-          loan_type,
-          term
-        )
-      `, { count: 'exact' })
+        lender_service_areas(state),
+        mortgage_rates(base_rate, apr, points, loan_type, term)
+      `)
       .eq('active', true);
 
     // Apply lender type filter
@@ -58,8 +48,8 @@ export async function GET(request: NextRequest) {
       query = query.gte('rating', parseFloat(minRating));
     }
 
-    // Execute initial query
-    const { data: allLenders, error: fetchError, count } = await query;
+    // Execute query
+    const { data: allLenders, error: fetchError } = await query;
 
     if (fetchError) {
       console.error('Error fetching lenders:', fetchError);
@@ -69,33 +59,42 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    let filteredLenders = allLenders || [];
+    if (!allLenders) {
+      return NextResponse.json({
+        data: [],
+        count: 0,
+        limit,
+        offset,
+        filters: { state, lender_type: lenderType, loan_type: loanType, term, min_rating: minRating, sort_by: sortBy }
+      });
+    }
 
     // STATE FILTERING LOGIC
-    // This is the critical part that was missing
+    let filteredLenders = allLenders;
+    
     if (state) {
-      filteredLenders = filteredLenders.filter(lender => {
+      const stateUpper = state.toUpperCase();
+      filteredLenders = allLenders.filter(lender => {
         // National lenders serve ALL states
         if (lender.lender_type === 'national') {
           return true;
         }
         
-        // Regional/state lenders must explicitly serve this state
-        if (lender.lender_service_areas && lender.lender_service_areas.length > 0) {
+        // Regional/state lenders - check service areas
+        if (lender.lender_service_areas && Array.isArray(lender.lender_service_areas)) {
           return lender.lender_service_areas.some(
-            (area: any) => area.state === state.toUpperCase()
+            (area: { state: string }) => area.state === stateUpper
           );
         }
         
-        // If no service areas defined, exclude (shouldn't happen after our population)
         return false;
       });
     }
 
-    // Filter by loan type and term if mortgage rates exist
+    // LOAN TYPE & TERM FILTERING
     if (loanType || term) {
       filteredLenders = filteredLenders.map(lender => {
-        if (!lender.mortgage_rates || lender.mortgage_rates.length === 0) {
+        if (!lender.mortgage_rates || !Array.isArray(lender.mortgage_rates)) {
           return lender;
         }
 
@@ -109,43 +108,32 @@ export async function GET(request: NextRequest) {
           rates = rates.filter((r: any) => r.term === term);
         }
 
-        return {
-          ...lender,
-          mortgage_rates: rates
-        };
+        return { ...lender, mortgage_rates: rates };
       });
     }
 
-    // Calculate lowest rate for each lender (for sorting)
+    // CALCULATE LOWEST RATES
     const lendersWithRates = filteredLenders.map(lender => {
       let lowestRate = null;
       let lowestApr = null;
 
-      if (lender.mortgage_rates && lender.mortgage_rates.length > 0) {
-        const rates = lender.mortgage_rates
+      if (lender.mortgage_rates && Array.isArray(lender.mortgage_rates)) {
+        const validRates = lender.mortgage_rates
           .filter((r: any) => r.base_rate != null)
-          .map((r: any) => r.base_rate);
+          .map((r: any) => parseFloat(r.base_rate));
         
-        const aprs = lender.mortgage_rates
+        const validAprs = lender.mortgage_rates
           .filter((r: any) => r.apr != null)
-          .map((r: any) => r.apr);
+          .map((r: any) => parseFloat(r.apr));
 
-        if (rates.length > 0) {
-          lowestRate = Math.min(...rates);
-        }
-        if (aprs.length > 0) {
-          lowestApr = Math.min(...aprs);
-        }
+        if (validRates.length > 0) lowestRate = Math.min(...validRates);
+        if (validAprs.length > 0) lowestApr = Math.min(...validAprs);
       }
 
-      return {
-        ...lender,
-        lowest_rate: lowestRate,
-        lowest_apr: lowestApr
-      };
+      return { ...lender, lowest_rate: lowestRate, lowest_apr: lowestApr };
     });
 
-    // Sorting
+    // SORTING
     let sortedLenders = [...lendersWithRates];
     
     if (sortBy === 'rating') {
@@ -168,10 +156,10 @@ export async function GET(request: NextRequest) {
       sortedLenders.sort((a, b) => (b.review_count || 0) - (a.review_count || 0));
     }
 
-    // Pagination
+    // PAGINATION
     const paginatedLenders = sortedLenders.slice(offset, offset + limit);
 
-    // Clean up the response (remove service areas array from response)
+    // CLEAN RESPONSE (remove service_areas array)
     const cleanLenders = paginatedLenders.map(lender => {
       const { lender_service_areas, ...rest } = lender;
       return rest;
