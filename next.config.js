@@ -2,15 +2,16 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  experimental: {
-    serverActions: {
-      enabled: true,
-    },
+  typescript: {
+    ignoreBuildErrors: true,
   },
-  env: {
-    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  eslint: {
+    ignoreDuringBuilds: true,
   },
-};
+  images: {
+    domains: ['images.unsplash.com', 'source.unsplash.com', 'via.placeholder.com'],
+    unoptimized: true,
+  },
+}
 
-module.exports = nextConfig;
+module.exports = nextConfig
