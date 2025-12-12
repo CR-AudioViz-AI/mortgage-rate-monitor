@@ -1,95 +1,74 @@
-// app/api/mortgage/historical/route.ts
-// CR AudioViz AI - Historical Mortgage Rates API
-// Roy Henderson @ CR AudioViz AI, LLC
+// GET /api/mortgage/historical - Historical mortgage rates for charting
+// CR AudioViz AI - Mortgage Rate Monitor
+// Roy Henderson @ December 2025
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getHistoricalRatesWithSpreads } from '@/lib/mortgage-rates';
-import { HistoricalRatesResponse } from '@/types/mortgage';
+import { NextResponse } from 'next/server';
+import { getHistoricalRates, FRED_SERIES } from '@/lib/fred-api';
+import type { HistoricalResponse, HistoricalRate } from '@/types/mortgage';
 
-// Cache historical data for longer since it changes less frequently
-export const revalidate = 7200; // 2 hours
+// Valid series IDs
+const VALID_SERIES: Record<string, string> = {
+  '30y': FRED_SERIES.MORTGAGE_30Y,
+  '15y': FRED_SERIES.MORTGAGE_15Y,
+  'MORTGAGE30US': FRED_SERIES.MORTGAGE_30Y,
+  'MORTGAGE15US': FRED_SERIES.MORTGAGE_15Y,
+};
 
-export async function GET(request: NextRequest) {
+const RATE_TYPE_NAMES: Record<string, string> = {
+  [FRED_SERIES.MORTGAGE_30Y]: '30-Year Fixed',
+  [FRED_SERIES.MORTGAGE_15Y]: '15-Year Fixed',
+};
+
+export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const period = (searchParams.get('period') || '1Y') as '1M' | '3M' | '6M' | '1Y' | '5Y' | 'ALL';
-    const rateType = searchParams.get('type'); // Optional: filter to specific rate type
+    
+    // Get parameters
+    const seriesParam = searchParams.get('series') || '30y';
+    const limitParam = searchParams.get('limit') || '52';
+    
+    // Validate and resolve series ID
+    const seriesId = VALID_SERIES[seriesParam] || VALID_SERIES['30y'];
+    const limit = Math.min(Math.max(parseInt(limitParam, 10) || 52, 1), 520); // 1-520 weeks (10 years)
 
-    // Validate period
-    const validPeriods = ['1M', '3M', '6M', '1Y', '5Y', 'ALL'];
-    if (!validPeriods.includes(period)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Invalid period',
-          valid_periods: validPeriods,
-        },
-        { status: 400 }
-      );
-    }
+    // Fetch historical data
+    const observations = await getHistoricalRates(seriesId, limit);
 
-    const historicalData = await getHistoricalRatesWithSpreads(period);
+    // Transform to simpler format
+    const data: HistoricalRate[] = observations
+      .filter(obs => obs.value !== '.')
+      .map(obs => ({
+        date: obs.date,
+        rate: parseFloat(obs.value),
+      }))
+      .reverse(); // Chronological order
 
-    // If specific rate type requested, filter the data
-    let filteredData = historicalData;
-    if (rateType) {
-      const rateKey = `rate_${rateType.toLowerCase().replace('-', '_').replace('/', '_')}` as keyof typeof historicalData[0];
-      filteredData = historicalData.map(entry => ({
-        date: entry.date,
-        rate: entry[rateKey] as number || entry.rate_30yr,
-      })) as any;
-    }
-
-    // Calculate start and end dates
-    const dates = historicalData.map(d => d.date);
-    const startDate = dates[0] || '';
-    const endDate = dates[dates.length - 1] || '';
-
-    const response: HistoricalRatesResponse = {
+    const response: HistoricalResponse = {
       success: true,
-      data: filteredData,
-      period,
-      start_date: startDate,
-      end_date: endDate,
-      timestamp: new Date().toISOString(),
+      seriesId,
+      rateType: RATE_TYPE_NAMES[seriesId] || '30-Year Fixed',
+      data,
+      count: data.length,
     };
 
     return NextResponse.json(response, {
       headers: {
-        'Cache-Control': 'public, s-maxage=7200, stale-while-revalidate=86400',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200',
       },
     });
   } catch (error) {
-    console.error('Error fetching historical rates:', error);
-    
+    console.error('Historical rates API error:', error);
+
     return NextResponse.json(
       {
         success: false,
         error: 'Failed to fetch historical rates',
         message: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
       },
-      { 
-        status: 500,
-        headers: {
-          'Cache-Control': 'no-store',
-        },
-      }
+      { status: 500 }
     );
   }
 }
 
-// Handle CORS preflight
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Max-Age': '86400',
-    },
-  });
-}
+// Revalidate every hour
+export const revalidate = 3600;
