@@ -1,208 +1,199 @@
-// lib/fred-api.ts
-// CR AudioViz AI - FRED API Integration
-// Roy Henderson @ CR AudioViz AI, LLC
-// Federal Reserve Economic Data - Official Mortgage Rate Source
+// FRED API Client - Federal Reserve Economic Data
+// CR AudioViz AI - Mortgage Rate Monitor
+// Roy Henderson @ December 2025
 
-import { FredResponse, FredObservation } from '@/types/mortgage';
+export interface FREDObservation {
+  date: string;
+  value: string;
+  realtime_start: string;
+  realtime_end: string;
+}
 
-const FRED_BASE_URL = 'https://api.stlouisfed.org/fred';
+export interface FREDResponse {
+  observations: FREDObservation[];
+  count: number;
+}
+
+export interface MortgageRate {
+  rateType: string;
+  rate: number;
+  previousRate: number;
+  change: number;
+  changePercent: number;
+  date: string;
+  source: 'FRED' | 'CALCULATED';
+  seriesId?: string;
+}
 
 // FRED Series IDs for mortgage rates
 export const FRED_SERIES = {
-  MORTGAGE_30YR: 'MORTGAGE30US',
-  MORTGAGE_15YR: 'MORTGAGE15US',
+  MORTGAGE_30Y: 'MORTGAGE30US',
+  MORTGAGE_15Y: 'MORTGAGE15US',
 } as const;
 
-export type FredSeriesId = typeof FRED_SERIES[keyof typeof FRED_SERIES];
+// Industry-standard rate spreads for calculated rates
+const RATE_SPREADS = {
+  '20-Year Fixed': { base: 'MORTGAGE_30Y', spread: -0.25 },
+  '10-Year Fixed': { base: 'MORTGAGE_15Y', spread: -0.35 },
+  '5/1 ARM': { base: 'MORTGAGE_30Y', spread: -0.55 },
+  '7/1 ARM': { base: 'MORTGAGE_30Y', spread: -0.40 },
+  'FHA 30-Year': { base: 'MORTGAGE_30Y', spread: -0.45 },
+  'VA 30-Year': { base: 'MORTGAGE_30Y', spread: -0.55 },
+  'Jumbo 30-Year': { base: 'MORTGAGE_30Y', spread: 0.30 },
+} as const;
 
-interface FetchSeriesOptions {
-  limit?: number;
-  sortOrder?: 'asc' | 'desc';
-  startDate?: string;
-  endDate?: string;
-}
+const FRED_API_KEY = process.env.FRED_API_KEY;
+const FRED_BASE_URL = 'https://api.stlouisfed.org/fred/series/observations';
 
 /**
- * Fetch observations from FRED API
+ * Fetch mortgage rate data from FRED API
  */
-export async function fetchFredSeries(
-  seriesId: FredSeriesId,
-  options: FetchSeriesOptions = {}
-): Promise<FredObservation[]> {
-  const apiKey = process.env.FRED_API_KEY;
-  
-  if (!apiKey) {
+export async function fetchFREDRate(
+  seriesId: string,
+  limit: number = 2
+): Promise<FREDObservation[]> {
+  if (!FRED_API_KEY) {
     throw new Error('FRED_API_KEY environment variable is not set');
   }
 
-  const {
-    limit = 10,
-    sortOrder = 'desc',
-    startDate,
-    endDate,
-  } = options;
+  const url = new URL(FRED_BASE_URL);
+  url.searchParams.set('series_id', seriesId);
+  url.searchParams.set('api_key', FRED_API_KEY);
+  url.searchParams.set('file_type', 'json');
+  url.searchParams.set('limit', limit.toString());
+  url.searchParams.set('sort_order', 'desc');
 
-  const params = new URLSearchParams({
-    series_id: seriesId,
-    api_key: apiKey,
-    file_type: 'json',
-    sort_order: sortOrder,
-    limit: limit.toString(),
+  const response = await fetch(url.toString(), {
+    next: { revalidate: 3600 }, // Cache for 1 hour
   });
 
-  if (startDate) {
-    params.append('observation_start', startDate);
-  }
-  if (endDate) {
-    params.append('observation_end', endDate);
+  if (!response.ok) {
+    throw new Error(`FRED API error: ${response.status} ${response.statusText}`);
   }
 
-  const url = `${FRED_BASE_URL}/series/observations?${params.toString()}`;
-
-  try {
-    const response = await fetch(url, {
-      next: { revalidate: 3600 }, // Cache for 1 hour
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`FRED API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data: FredResponse = await response.json();
-    
-    // Filter out any observations with "." value (missing data)
-    return data.observations.filter(obs => obs.value !== '.');
-  } catch (error) {
-    console.error(`Error fetching FRED series ${seriesId}:`, error);
-    throw error;
-  }
+  const data: FREDResponse = await response.json();
+  return data.observations;
 }
 
 /**
- * Get current mortgage rates from FRED
+ * Get current mortgage rate with previous rate for comparison
  */
-export async function getCurrentMortgageRates(): Promise<{
-  rate30yr: number;
-  rate15yr: number;
-  prev30yr: number | null;
-  prev15yr: number | null;
-  lastUpdated: string;
-}> {
+export async function getMortgageRate(
+  seriesId: string,
+  rateType: string
+): Promise<MortgageRate> {
+  const observations = await fetchFREDRate(seriesId, 2);
+
+  if (!observations || observations.length === 0) {
+    throw new Error(`No data available for series ${seriesId}`);
+  }
+
+  const currentRate = parseFloat(observations[0].value);
+  const previousRate = observations.length > 1 
+    ? parseFloat(observations[1].value) 
+    : currentRate;
+
+  const change = currentRate - previousRate;
+  const changePercent = previousRate !== 0 
+    ? (change / previousRate) * 100 
+    : 0;
+
+  return {
+    rateType,
+    rate: currentRate,
+    previousRate,
+    change: Math.round(change * 1000) / 1000,
+    changePercent: Math.round(changePercent * 100) / 100,
+    date: observations[0].date,
+    source: 'FRED',
+    seriesId,
+  };
+}
+
+/**
+ * Calculate estimated rate based on base rate and spread
+ */
+export function calculateRate(
+  baseRate: number,
+  spread: number,
+  rateType: string,
+  date: string,
+  previousBaseRate: number
+): MortgageRate {
+  const rate = Math.round((baseRate + spread) * 1000) / 1000;
+  const previousRate = Math.round((previousBaseRate + spread) * 1000) / 1000;
+  const change = rate - previousRate;
+  const changePercent = previousRate !== 0 
+    ? (change / previousRate) * 100 
+    : 0;
+
+  return {
+    rateType,
+    rate,
+    previousRate,
+    change: Math.round(change * 1000) / 1000,
+    changePercent: Math.round(changePercent * 100) / 100,
+    date,
+    source: 'CALCULATED',
+  };
+}
+
+/**
+ * Get all mortgage rates (official + calculated)
+ */
+export async function getAllMortgageRates(): Promise<MortgageRate[]> {
   try {
-    // Fetch both series in parallel
-    const [obs30yr, obs15yr] = await Promise.all([
-      fetchFredSeries(FRED_SERIES.MORTGAGE_30YR, { limit: 2 }),
-      fetchFredSeries(FRED_SERIES.MORTGAGE_15YR, { limit: 2 }),
+    // Fetch official FRED rates
+    const [rate30Y, rate15Y] = await Promise.all([
+      getMortgageRate(FRED_SERIES.MORTGAGE_30Y, '30-Year Fixed'),
+      getMortgageRate(FRED_SERIES.MORTGAGE_15Y, '15-Year Fixed'),
     ]);
 
-    if (obs30yr.length === 0 || obs15yr.length === 0) {
-      throw new Error('No mortgage rate data available from FRED');
+    const rates: MortgageRate[] = [rate30Y, rate15Y];
+
+    // Calculate other rate types based on spreads
+    for (const [rateType, config] of Object.entries(RATE_SPREADS)) {
+      const baseRate = config.base === 'MORTGAGE_30Y' ? rate30Y : rate15Y;
+      
+      const calculatedRate = calculateRate(
+        baseRate.rate,
+        config.spread,
+        rateType,
+        baseRate.date,
+        baseRate.previousRate
+      );
+      
+      rates.push(calculatedRate);
     }
 
-    return {
-      rate30yr: parseFloat(obs30yr[0].value),
-      rate15yr: parseFloat(obs15yr[0].value),
-      prev30yr: obs30yr.length > 1 ? parseFloat(obs30yr[1].value) : null,
-      prev15yr: obs15yr.length > 1 ? parseFloat(obs15yr[1].value) : null,
-      lastUpdated: obs30yr[0].date,
-    };
+    // Sort by rate type for consistent ordering
+    const sortOrder = [
+      '30-Year Fixed',
+      '20-Year Fixed', 
+      '15-Year Fixed',
+      '10-Year Fixed',
+      '7/1 ARM',
+      '5/1 ARM',
+      'FHA 30-Year',
+      'VA 30-Year',
+      'Jumbo 30-Year',
+    ];
+
+    return rates.sort((a, b) => 
+      sortOrder.indexOf(a.rateType) - sortOrder.indexOf(b.rateType)
+    );
   } catch (error) {
-    console.error('Error getting current mortgage rates:', error);
+    console.error('Error fetching mortgage rates:', error);
     throw error;
   }
 }
 
 /**
- * Get historical mortgage rates for charting
+ * Get historical rates for charting
  */
 export async function getHistoricalRates(
-  period: '1M' | '3M' | '6M' | '1Y' | '5Y' | 'ALL' = '1Y'
-): Promise<{ date: string; rate30yr: number; rate15yr: number }[]> {
-  const endDate = new Date().toISOString().split('T')[0];
-  let startDate: string;
-  let limit: number;
-
-  switch (period) {
-    case '1M':
-      startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      limit = 5;
-      break;
-    case '3M':
-      startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      limit = 13;
-      break;
-    case '6M':
-      startDate = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      limit = 26;
-      break;
-    case '1Y':
-      startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      limit = 52;
-      break;
-    case '5Y':
-      startDate = new Date(Date.now() - 5 * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      limit = 260;
-      break;
-    case 'ALL':
-      startDate = '1971-04-01'; // FRED data starts from 1971
-      limit = 2800;
-      break;
-    default:
-      startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      limit = 52;
-  }
-
-  try {
-    const [obs30yr, obs15yr] = await Promise.all([
-      fetchFredSeries(FRED_SERIES.MORTGAGE_30YR, {
-        limit,
-        sortOrder: 'asc',
-        startDate,
-        endDate,
-      }),
-      fetchFredSeries(FRED_SERIES.MORTGAGE_15YR, {
-        limit,
-        sortOrder: 'asc',
-        startDate,
-        endDate,
-      }),
-    ]);
-
-    // Create a map for easy lookup
-    const rate15yrMap = new Map(
-      obs15yr.map(obs => [obs.date, parseFloat(obs.value)])
-    );
-
-    // Combine data, matching by date
-    return obs30yr.map(obs => ({
-      date: obs.date,
-      rate30yr: parseFloat(obs.value),
-      rate15yr: rate15yrMap.get(obs.date) ?? 0,
-    }));
-  } catch (error) {
-    console.error('Error getting historical rates:', error);
-    throw error;
-  }
-}
-
-/**
- * Check FRED API health
- */
-export async function checkFredApiHealth(): Promise<boolean> {
-  try {
-    const apiKey = process.env.FRED_API_KEY;
-    if (!apiKey) return false;
-
-    const response = await fetch(
-      `${FRED_BASE_URL}/series?series_id=MORTGAGE30US&api_key=${apiKey}&file_type=json`,
-      { next: { revalidate: 0 } }
-    );
-
-    return response.ok;
-  } catch {
-    return false;
-  }
+  seriesId: string = FRED_SERIES.MORTGAGE_30Y,
+  limit: number = 52
+): Promise<FREDObservation[]> {
+  return fetchFREDRate(seriesId, limit);
 }
