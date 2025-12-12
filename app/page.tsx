@@ -1,307 +1,317 @@
-'use client';
+// app/page.tsx
+// CR AudioViz AI - Mortgage Rate Monitor
+// Roy Henderson @ CR AudioViz AI, LLC
+// Real-time mortgage rates from Federal Reserve (FRED)
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense } from 'react';
+import Link from 'next/link';
+import { getAllMortgageRates } from '@/lib/mortgage-rates';
+import { MortgageRate } from '@/types/mortgage';
+
+// Revalidate every hour
+export const revalidate = 3600;
+
+async function MortgageRatesDisplay() {
+  try {
+    const { rates, lastUpdated, dataSource } = await getAllMortgageRates();
+    
+    const fixedRates = rates.filter(r => 
+      ['30YR_FIXED', '15YR_FIXED', '20YR_FIXED', '10YR_FIXED'].includes(r.rate_code)
+    );
+    const armRates = rates.filter(r => r.rate_code.includes('ARM'));
+    const govRates = rates.filter(r => 
+      r.rate_code.startsWith('FHA') || r.rate_code.startsWith('VA')
+    );
+    const jumboRates = rates.filter(r => r.rate_code.includes('JUMBO'));
+
+    return (
+      <>
+        {/* Hero Section */}
+        <section className="bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900 text-white py-16">
+          <div className="container mx-auto px-4">
+            <div className="max-w-4xl mx-auto text-center">
+              <h1 className="text-4xl md:text-5xl font-bold mb-4">
+                Today&apos;s Mortgage Rates
+              </h1>
+              <p className="text-xl text-blue-200 mb-2">
+                Real-time data from the Federal Reserve
+              </p>
+              <p className="text-sm text-blue-300">
+                Last updated: {new Date(lastUpdated).toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </p>
+            </div>
+            
+            {/* Featured Rates */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-10 max-w-4xl mx-auto">
+              {rates.slice(0, 4).map(rate => (
+                <div 
+                  key={rate.rate_code}
+                  className="bg-white/10 backdrop-blur-sm rounded-xl p-6 text-center"
+                >
+                  <div className="text-sm text-blue-200 mb-2">
+                    {rate.rate_type}
+                    {rate.is_estimated && ' *'}
+                  </div>
+                  <div className="text-3xl font-bold mb-1">
+                    {rate.current_rate.toFixed(2)}%
+                  </div>
+                  <div className={`text-sm flex items-center justify-center gap-1 ${
+                    rate.change_direction === 'down' ? 'text-green-400' :
+                    rate.change_direction === 'up' ? 'text-red-400' : 'text-gray-400'
+                  }`}>
+                    {rate.change_direction === 'up' && '↑'}
+                    {rate.change_direction === 'down' && '↓'}
+                    {rate.change_direction === 'unchanged' && '→'}
+                    <span>{Math.abs(rate.change).toFixed(2)}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* All Rates Section */}
+        <section className="py-16 bg-gray-50">
+          <div className="container mx-auto px-4">
+            <h2 className="text-3xl font-bold text-center mb-12 text-gray-900">
+              Complete Rate Overview
+            </h2>
+            
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
+              {/* Fixed Rate Mortgages */}
+              <RateCard 
+                title="Fixed Rate" 
+                icon="🏠"
+                rates={fixedRates} 
+              />
+              
+              {/* ARM Mortgages */}
+              <RateCard 
+                title="Adjustable Rate (ARM)" 
+                icon="📊"
+                rates={armRates} 
+              />
+              
+              {/* Government Loans */}
+              <RateCard 
+                title="Government Loans" 
+                icon="🏛️"
+                rates={govRates} 
+              />
+              
+              {/* Jumbo Loans */}
+              <RateCard 
+                title="Jumbo Loans" 
+                icon="💎"
+                rates={jumboRates} 
+              />
+            </div>
+            
+            <p className="text-center text-sm text-gray-500 mt-8">
+              * Estimated rates based on industry-standard spreads. 
+              Official data from {dataSource}.
+            </p>
+          </div>
+        </section>
+
+        {/* Tools Section */}
+        <section className="py-16 bg-white">
+          <div className="container mx-auto px-4">
+            <h2 className="text-3xl font-bold text-center mb-12 text-gray-900">
+              Mortgage Tools
+            </h2>
+            
+            <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+              <ToolCard
+                href="/calculators"
+                icon="🧮"
+                title="Payment Calculator"
+                description="Calculate your monthly mortgage payment based on current rates"
+              />
+              <ToolCard
+                href="/calculators"
+                icon="💰"
+                title="Affordability Calculator"
+                description="Find out how much home you can afford"
+              />
+              <ToolCard
+                href="/compare"
+                icon="⚖️"
+                title="Compare Scenarios"
+                description="Compare different loan options side by side"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* API Section */}
+        <section className="py-16 bg-gray-900 text-white">
+          <div className="container mx-auto px-4 text-center">
+            <h2 className="text-3xl font-bold mb-4">
+              Integrate Our Rates
+            </h2>
+            <p className="text-gray-400 mb-8 max-w-2xl mx-auto">
+              Use our free API to display real-time mortgage rates on your website or application.
+            </p>
+            <div className="bg-gray-800 rounded-lg p-4 max-w-2xl mx-auto text-left">
+              <code className="text-green-400 text-sm">
+                GET /api/mortgage/rates
+              </code>
+            </div>
+            <Link 
+              href="/api-docs"
+              className="inline-block mt-6 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+            >
+              View API Documentation
+            </Link>
+          </div>
+        </section>
+      </>
+    );
+  } catch (error) {
+    console.error('Error loading rates:', error);
+    return (
+      <section className="py-16 bg-red-50">
+        <div className="container mx-auto px-4 text-center">
+          <h2 className="text-2xl font-bold text-red-700 mb-4">
+            Unable to Load Rates
+          </h2>
+          <p className="text-red-600">
+            Please try again later. Our data source may be temporarily unavailable.
+          </p>
+        </div>
+      </section>
+    );
+  }
+}
+
+function RateCard({ title, icon, rates }: { 
+  title: string; 
+  icon: string;
+  rates: MortgageRate[];
+}) {
+  return (
+    <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+          <span>{icon}</span>
+          {title}
+        </h3>
+      </div>
+      <div className="divide-y divide-gray-100">
+        {rates.map(rate => (
+          <div key={rate.rate_code} className="px-6 py-4 flex justify-between items-center">
+            <div>
+              <div className="font-medium text-gray-900">
+                {rate.rate_type}
+                {rate.is_estimated && (
+                  <span className="ml-1 text-xs text-yellow-600">*</span>
+                )}
+              </div>
+              <div className={`text-xs ${
+                rate.change_direction === 'down' ? 'text-green-600' :
+                rate.change_direction === 'up' ? 'text-red-600' : 'text-gray-500'
+              }`}>
+                {rate.change_direction === 'up' && '↑ '}
+                {rate.change_direction === 'down' && '↓ '}
+                {Math.abs(rate.change).toFixed(2)}% from last week
+              </div>
+            </div>
+            <div className="text-2xl font-bold text-blue-600">
+              {rate.current_rate.toFixed(2)}%
+            </div>
+          </div>
+        ))}
+        {rates.length === 0 && (
+          <div className="px-6 py-4 text-gray-500 text-center">
+            No rates available
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ToolCard({ href, icon, title, description }: {
+  href: string;
+  icon: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <Link 
+      href={href}
+      className="block bg-gray-50 hover:bg-gray-100 rounded-xl p-6 transition-colors border border-gray-200"
+    >
+      <div className="text-4xl mb-4">{icon}</div>
+      <h3 className="text-xl font-bold text-gray-900 mb-2">{title}</h3>
+      <p className="text-gray-600">{description}</p>
+    </Link>
+  );
+}
+
+function LoadingRates() {
+  return (
+    <section className="py-16">
+      <div className="container mx-auto px-4">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-300 rounded w-1/3 mx-auto mb-8"></div>
+          <div className="grid md:grid-cols-4 gap-4 max-w-4xl mx-auto">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="bg-gray-200 rounded-xl h-32"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 export default function HomePage() {
-  const router = useRouter();
-  const [zipCode, setZipCode] = useState('');
-  const [loanType, setLoanType] = useState('conventional');
-  const [marketRates, setMarketRates] = useState({
-    rate_30y: 6.11,
-    rate_15y: 5.50,
-    rate_arm: 6.13
-  });
-
-  const handleQuickSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    router.push(`/compare?zip=${zipCode}&loan_type=${loanType}`);
-  };
-
   return (
-    <div className="min-h-screen bg-white">
-      {/* Hero Section */}
-      <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-          <div className="text-center">
-            <h1 className="text-5xl md:text-6xl font-bold mb-6">
-              Find Your Perfect Mortgage Rate
-            </h1>
-            <p className="text-2xl md:text-3xl text-blue-100 mb-8">
-              Compare 500+ lenders • Save thousands • Get quotes in minutes
-            </p>
-
-            {/* Quick Search */}
-            <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-2xl p-8">
-              <form onSubmit={handleQuickSearch} className="space-y-4">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-left text-sm font-medium text-gray-700 mb-2">
-                      ZIP Code
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Enter ZIP code"
-                      value={zipCode}
-                      onChange={(e) => setZipCode(e.target.value)}
-                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-left text-sm font-medium text-gray-700 mb-2">
-                      Loan Type
-                    </label>
-                    <select
-                      value={loanType}
-                      onChange={(e) => setLoanType(e.target.value)}
-                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="conventional">Conventional</option>
-                      <option value="fha">FHA</option>
-                      <option value="va">VA</option>
-                      <option value="usda">USDA</option>
-                      <option value="jumbo">Jumbo</option>
-                    </select>
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  className="w-full px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-bold text-lg hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105"
-                >
-                  🔍 Compare Rates Now
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Current Market Rates */}
-      <div className="bg-gray-50 py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-center text-gray-900 mb-8">
-            📊 Current National Average Rates
-          </h2>
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-              <div className="text-5xl mb-4">🏠</div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">30-Year Fixed</h3>
-              <div className="text-4xl font-bold text-blue-600 mb-2">
-                {marketRates.rate_30y.toFixed(2)}%
-              </div>
-              <p className="text-gray-600">Most popular mortgage term</p>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-              <div className="text-5xl mb-4">⚡</div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">15-Year Fixed</h3>
-              <div className="text-4xl font-bold text-blue-600 mb-2">
-                {marketRates.rate_15y.toFixed(2)}%
-              </div>
-              <p className="text-gray-600">Pay off faster, save on interest</p>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-              <div className="text-5xl mb-4">📊</div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">5/1 ARM</h3>
-              <div className="text-4xl font-bold text-blue-600 mb-2">
-                {marketRates.rate_arm.toFixed(2)}%
-              </div>
-              <p className="text-gray-600">Lower initial rate</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Features Grid */}
-      <div className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Why Choose CR AudioViz Mortgage Monitor?
-            </h2>
-            <p className="text-xl text-gray-600">
-              Everything you need to find and secure the best mortgage rate
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[
-              {
-                icon: '🏦',
-                title: '500+ Lenders',
-                description: 'Compare rates from national banks, regional lenders, local credit unions, and online lenders all in one place'
-              },
-              {
-                icon: '📍',
-                title: 'Location-Based Filtering',
-                description: 'Enter your ZIP code and see only lenders that actually service your area. No wasted time.'
-              },
-              {
-                icon: '🎯',
-                title: 'Smart Lender Types',
-                description: 'Filter by national, state, regional, local, credit unions, or online-only lenders'
-              },
-              {
-                icon: '💰',
-                title: 'All Loan Types',
-                description: 'Conventional, FHA, VA, USDA, Jumbo - whatever you need, we have it'
-              },
-              {
-                icon: '📧',
-                title: 'Rate Alerts',
-                description: 'Get instant email notifications when rates drop to your target level'
-              },
-              {
-                icon: '📊',
-                title: 'Historical Data',
-                description: '5 years of rate trends to help you time your purchase or refinance perfectly'
-              },
-              {
-                icon: '🔐',
-                title: 'You Own Your Data',
-                description: 'Unlike LendingTree, we never sell your leads. You control who contacts you.'
-              },
-              {
-                icon: '💳',
-                title: 'CR AudioViz Credits',
-                description: 'Use your credits across 60+ CR AudioViz tools - not just mortgages'
-              },
-              {
-                icon: '🤝',
-                title: 'Realtor Integration',
-                description: 'Optional connection to partner realtors in your area for end-to-end support'
-              }
-            ].map((feature, idx) => (
-              <div key={idx} className="bg-white rounded-xl shadow-lg p-6 hover:shadow-2xl transition-shadow">
-                <div className="text-5xl mb-4">{feature.icon}</div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{feature.title}</h3>
-                <p className="text-gray-600">{feature.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* How It Works */}
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-4xl font-bold text-center text-gray-900 mb-16">
-            How It Works
-          </h2>
-          
-          <div className="grid md:grid-cols-4 gap-8">
-            {[
-              { step: 1, title: 'Enter Your Info', description: 'ZIP code, loan type, down payment, credit score range' },
-              { step: 2, title: 'See Available Lenders', description: 'Filter by type, sort by rate, compare side-by-side' },
-              { step: 3, title: 'Select & Compare', description: 'Choose up to 3 lenders to compare in detail' },
-              { step: 4, title: 'Get Quotes', description: 'Submit one form, get quotes from all selected lenders' }
-            ].map((item) => (
-              <div key={item.step} className="text-center">
-                <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-4">
-                  {item.step}
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{item.title}</h3>
-                <p className="text-gray-600">{item.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Social Proof */}
-      <div className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-white rounded-2xl shadow-2xl p-12">
-            <div className="grid md:grid-cols-4 gap-8 text-center">
-              <div>
-                <div className="text-5xl font-bold text-blue-600 mb-2">500+</div>
-                <div className="text-gray-600">Lenders</div>
-              </div>
-              <div>
-                <div className="text-5xl font-bold text-blue-600 mb-2">$2.4M</div>
-                <div className="text-gray-600">Saved for Users</div>
-              </div>
-              <div>
-                <div className="text-5xl font-bold text-blue-600 mb-2">10K+</div>
-                <div className="text-gray-600">Happy Homebuyers</div>
-              </div>
-              <div>
-                <div className="text-5xl font-bold text-blue-600 mb-2">4.8★</div>
-                <div className="text-gray-600">Average Rating</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* CTA */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white py-20">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">
-            Ready to Save Thousands on Your Mortgage?
-          </h2>
-          <p className="text-xl text-blue-100 mb-8">
-            Compare rates from 500+ lenders in seconds. No obligation. No hidden fees.
-          </p>
-          <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <button
-              onClick={() => router.push('/compare')}
-              className="px-10 py-4 bg-white text-blue-600 rounded-lg font-bold text-lg hover:bg-gray-100 transition-colors"
-            >
-              Compare Rates Now
-            </button>
-            <button
-              onClick={() => router.push('/pricing')}
-              className="px-10 py-4 bg-transparent border-2 border-white text-white rounded-lg font-bold text-lg hover:bg-white hover:text-blue-600 transition-all"
-            >
-              View Pricing
-            </button>
-          </div>
-        </div>
-      </div>
-
+    <main>
+      <Suspense fallback={<LoadingRates />}>
+        <MortgageRatesDisplay />
+      </Suspense>
+      
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-4 gap-8">
+        <div className="container mx-auto px-4">
+          <div className="grid md:grid-cols-3 gap-8">
             <div>
-              <h3 className="font-bold text-lg mb-4">CR AudioViz AI</h3>
-              <p className="text-gray-400">
-                Your Story. Our Design.
+              <h4 className="font-bold text-lg mb-4">Mortgage Rate Monitor</h4>
+              <p className="text-gray-400 text-sm">
+                Real-time mortgage rate data powered by the Federal Reserve 
+                Economic Data (FRED) API. A CR AudioViz AI product.
               </p>
             </div>
             <div>
-              <h4 className="font-bold mb-4">Products</h4>
+              <h4 className="font-bold text-lg mb-4">Quick Links</h4>
               <ul className="space-y-2 text-gray-400">
-                <li><a href="/compare" className="hover:text-white">Rate Comparison</a></li>
-                <li><a href="/pricing" className="hover:text-white">Pricing</a></li>
-                <li><a href="/calculators" className="hover:text-white">Calculators</a></li>
+                <li><Link href="/calculators" className="hover:text-white">Calculators</Link></li>
+                <li><Link href="/compare" className="hover:text-white">Compare Loans</Link></li>
+                <li><Link href="/api-docs" className="hover:text-white">API Docs</Link></li>
               </ul>
             </div>
             <div>
-              <h4 className="font-bold mb-4">Resources</h4>
-              <ul className="space-y-2 text-gray-400">
-                <li><a href="/blog" className="hover:text-white">Blog</a></li>
-                <li><a href="/guides" className="hover:text-white">Guides</a></li>
-                <li><a href="/api" className="hover:text-white">API</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold mb-4">Company</h4>
-              <ul className="space-y-2 text-gray-400">
-                <li><a href="https://craudiovizai.com/about" className="hover:text-white">About</a></li>
-                <li><a href="https://craudiovizai.com/contact" className="hover:text-white">Contact</a></li>
-                <li><a href="/privacy" className="hover:text-white">Privacy</a></li>
-              </ul>
+              <h4 className="font-bold text-lg mb-4">Data Source</h4>
+              <p className="text-gray-400 text-sm">
+                30-year and 15-year fixed rates from Freddie Mac Primary 
+                Mortgage Market Survey® via FRED. Other rates estimated 
+                using industry-standard spreads.
+              </p>
             </div>
           </div>
-          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-            <p>© 2025 CR AudioViz AI, LLC. All rights reserved. NMLS #TBD</p>
+          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-500 text-sm">
+            © {new Date().getFullYear()} CR AudioViz AI, LLC. All rights reserved.
           </div>
         </div>
       </footer>
-    </div>
+    </main>
   );
 }
