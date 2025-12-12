@@ -1,21 +1,12 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "github": {
+    "autoAlias": false
+  },
   "crons": [
     {
-      "path": "/api/scrape/lenders",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/alerts/check",
+      "path": "/api/mortgage/rates?refresh=true",
       "schedule": "0 */6 * * *"
-    },
-    {
-      "path": "/api/rates/sync",
-      "schedule": "0 */12 * * *"
     }
-  ],
-  "git": {
-    "deploymentEnabled": {
-      "main": false
-    }
-  }
+  ]
 }
