@@ -1,113 +1,98 @@
-// app/api/mortgage/rates/route.ts
-// CR AudioViz AI - Mortgage Rate Monitor API
-// Roy Henderson @ CR AudioViz AI, LLC
-// Real-time mortgage rates from FRED + calculated spreads
+// GET /api/mortgage/rates - Real-time mortgage rates from FRED
+// CR AudioViz AI - Mortgage Rate Monitor
+// Roy Henderson @ December 2025
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getAllMortgageRates, getRatesByCategory } from '@/lib/mortgage-rates';
-import { MortgageRatesResponse } from '@/types/mortgage';
+import { NextResponse } from 'next/server';
+import { getAllMortgageRates } from '@/lib/fred-api';
+import type { RateResponse, MortgageRate } from '@/types/mortgage';
 
-// Cache control: Rates update weekly on Thursdays
-// Revalidate every hour to balance freshness with API efficiency
-export const revalidate = 3600;
+// Cache rates in memory for 15 minutes
+let cachedRates: MortgageRate[] | null = null;
+let cacheTimestamp: number = 0;
+const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
+  const startTime = Date.now();
+  
   try {
+    // Check URL params
     const { searchParams } = new URL(request.url);
-    const category = searchParams.get('category') as 'fixed' | 'arm' | 'government' | 'jumbo' | null;
-    const format = searchParams.get('format') || 'full';
+    const forceRefresh = searchParams.get('refresh') === 'true';
+    const rateType = searchParams.get('type'); // Filter by specific type
 
-    let rates;
-    let dataSource: string;
-    let lastUpdated: string;
+    // Check cache
+    const now = Date.now();
+    const cacheValid = cachedRates && (now - cacheTimestamp) < CACHE_DURATION;
 
-    if (category) {
-      // Get filtered rates by category
-      rates = await getRatesByCategory(category);
-      const allRates = await getAllMortgageRates();
-      dataSource = allRates.dataSource;
-      lastUpdated = allRates.lastUpdated;
+    let rates: MortgageRate[];
+    let cacheHit = false;
+
+    if (cacheValid && !forceRefresh) {
+      rates = cachedRates!;
+      cacheHit = true;
     } else {
-      // Get all rates
-      const result = await getAllMortgageRates();
-      rates = result.rates;
-      dataSource = result.dataSource;
-      lastUpdated = result.lastUpdated;
+      // Fetch fresh data from FRED
+      rates = await getAllMortgageRates();
+      
+      // Update cache
+      cachedRates = rates;
+      cacheTimestamp = now;
     }
 
-    // Calculate next update time (next Thursday at noon EST)
-    const now = new Date();
-    const nextThursday = new Date(now);
-    nextThursday.setDate(now.getDate() + ((4 - now.getDay() + 7) % 7 || 7));
-    nextThursday.setHours(12, 0, 0, 0);
+    // Filter by rate type if specified
+    if (rateType) {
+      rates = rates.filter(r => 
+        r.rateType.toLowerCase().includes(rateType.toLowerCase())
+      );
+    }
 
-    // Simple format for widgets
-    if (format === 'simple') {
+    const response: RateResponse = {
+      success: true,
+      rates,
+      lastUpdated: new Date(cacheTimestamp).toISOString(),
+      source: 'Federal Reserve Economic Data (FRED) - Freddie Mac PMMS',
+      cacheHit,
+    };
+
+    // Add performance header
+    const duration = Date.now() - startTime;
+
+    return NextResponse.json(response, {
+      headers: {
+        'X-Response-Time': `${duration}ms`,
+        'X-Cache': cacheHit ? 'HIT' : 'MISS',
+        'Cache-Control': 'public, s-maxage=900, stale-while-revalidate=1800',
+      },
+    });
+  } catch (error) {
+    console.error('Mortgage rates API error:', error);
+
+    // Return cached data if available, even if stale
+    if (cachedRates) {
       return NextResponse.json({
         success: true,
-        rates: rates.map(r => ({
-          type: r.rate_type,
-          rate: r.current_rate,
-          change: r.change,
-          estimated: r.is_estimated,
-        })),
-        updated: lastUpdated,
+        rates: cachedRates,
+        lastUpdated: new Date(cacheTimestamp).toISOString(),
+        source: 'Federal Reserve Economic Data (FRED) - CACHED/STALE',
+        cacheHit: true,
+        warning: 'Using stale cached data due to API error',
       }, {
         headers: {
-          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'X-Cache': 'STALE',
         },
       });
     }
 
-    // Full response
-    const response: MortgageRatesResponse = {
-      success: true,
-      rates,
-      timestamp: now.toISOString(),
-      data_source: dataSource,
-      cache_ttl: 3600,
-      next_update: nextThursday.toISOString(),
-    };
-
-    return NextResponse.json(response, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      },
-    });
-  } catch (error) {
-    console.error('Error fetching mortgage rates:', error);
-    
-    // Return cached fallback data if available, otherwise error
     return NextResponse.json(
       {
         success: false,
         error: 'Failed to fetch mortgage rates',
         message: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
       },
-      { 
-        status: 500,
-        headers: {
-          'Cache-Control': 'no-store',
-        },
-      }
+      { status: 500 }
     );
   }
 }
 
-// Handle CORS preflight
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Max-Age': '86400',
-    },
-  });
-}
+// Revalidate every 15 minutes
+export const revalidate = 900;
