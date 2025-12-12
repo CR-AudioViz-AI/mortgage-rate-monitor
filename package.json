@@ -1,7 +1,8 @@
 {
-  "name": "javari-mortgage-rate-monitor",
-  "version": "3.0.0",
-  "description": "Javari AI Mortgage Rate Monitoring System - Full Interactive Frontend",
+  "name": "mortgage-rate-monitor",
+  "version": "2.0.0",
+  "description": "Real-time mortgage rate monitor powered by FRED API - CR AudioViz AI",
+  "author": "Roy Henderson <royhenderson@craudiovizai.com>",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -11,24 +12,25 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "14.2.0",
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "recharts": "^2.10.0"
+    "next": "14.2.5",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "recharts": "^2.12.7",
+    "lucide-react": "^0.400.0",
+    "@supabase/supabase-js": "^2.45.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^20.14.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
-    "typescript": "^5.5.0",
-    "tailwindcss": "^3.4.0",
-    "autoprefixer": "^10.4.0",
-    "postcss": "^8.4.0",
+    "typescript": "^5.4.0",
+    "tailwindcss": "^3.4.4",
+    "postcss": "^8.4.38",
+    "autoprefixer": "^10.4.19",
     "eslint": "^8.57.0",
-    "eslint-config-next": "14.2.0"
+    "eslint-config-next": "14.2.5"
   },
   "engines": {
-    "node": ">=18.17.0"
+    "node": ">=18.0.0"
   }
 }
