@@ -1,14 +1,36 @@
-// Javari AI Mortgage Rate Monitoring - Root Layout
-// Created: 2025-11-14 23:26 UTC
-// Roy Henderson, CEO @ CR AudioViz AI, LLC
+// Root Layout
+// CR AudioViz AI - Mortgage Rate Monitor
+// Roy Henderson @ December 2025
 
 import type { Metadata } from 'next';
-import Script from 'next/script';
+import { Inter } from 'next/font/google';
 import './globals.css';
 
+const inter = Inter({ subsets: ['latin'] });
+
 export const metadata: Metadata = {
-  title: 'Javari AI Mortgage Rate Monitoring',
-  description: 'Professional mortgage rate monitoring API with real-time data, historical analytics, and email alerts',
+  title: 'Mortgage Rate Monitor | CR AudioViz AI',
+  description: 'Real-time mortgage rates from Freddie Mac. Track 30-year fixed, 15-year fixed, ARM, FHA, VA, and Jumbo rates. Updated weekly.',
+  keywords: ['mortgage rates', 'home loan rates', '30 year fixed', '15 year fixed', 'FHA rates', 'VA rates', 'ARM rates'],
+  authors: [{ name: 'CR AudioViz AI' }],
+  creator: 'CR AudioViz AI',
+  publisher: 'CR AudioViz AI',
+  openGraph: {
+    title: 'Mortgage Rate Monitor | CR AudioViz AI',
+    description: 'Real-time mortgage rates from Freddie Mac. Track 30-year fixed, 15-year fixed, ARM, FHA, VA, and Jumbo rates.',
+    url: 'https://mortgage-rate-monitor.vercel.app',
+    siteName: 'Mortgage Rate Monitor',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Mortgage Rate Monitor | CR AudioViz AI',
+    description: 'Real-time mortgage rates from Freddie Mac. Track 30-year fixed, 15-year fixed, ARM, FHA, VA, and Jumbo rates.',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
@@ -18,9 +40,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}        {/* Javari AI */}
-        <Script src="https://javariai.com/embed.js" strategy="lazyOnload" />
-      </body>
+      <body className={inter.className}>{children}</body>
     </html>
   );
 }
