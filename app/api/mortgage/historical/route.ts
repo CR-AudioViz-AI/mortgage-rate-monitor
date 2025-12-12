@@ -1,111 +1,95 @@
+// app/api/mortgage/historical/route.ts
+// CR AudioViz AI - Historical Mortgage Rates API
+// Roy Henderson @ CR AudioViz AI, LLC
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getHistoricalRatesWithSpreads } from '@/lib/mortgage-rates';
+import { HistoricalRatesResponse } from '@/types/mortgage';
 
-export const dynamic = 'force-dynamic';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Cache historical data for longer since it changes less frequently
+export const revalidate = 7200; // 2 hours
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const lenderId = searchParams.get('lender_id');
-    const range = searchParams.get('range') || '30d';
+    const period = (searchParams.get('period') || '1Y') as '1M' | '3M' | '6M' | '1Y' | '5Y' | 'ALL';
+    const rateType = searchParams.get('type'); // Optional: filter to specific rate type
 
-    const now = new Date();
-    let startDate = new Date();
-    
-    switch (range) {
-      case '7d': startDate.setDate(now.getDate() - 7); break;
-      case '30d': startDate.setDate(now.getDate() - 30); break;
-      case '90d': startDate.setDate(now.getDate() - 90); break;
-      case '1y': startDate.setFullYear(now.getFullYear() - 1); break;
-      case '5y': startDate.setFullYear(now.getFullYear() - 5); break;
-      case 'all': startDate = new Date('2000-01-01'); break;
-      default: startDate.setDate(now.getDate() - 30);
+    // Validate period
+    const validPeriods = ['1M', '3M', '6M', '1Y', '5Y', 'ALL'];
+    if (!validPeriods.includes(period)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Invalid period',
+          valid_periods: validPeriods,
+        },
+        { status: 400 }
+      );
     }
 
-    let query = supabase
-      .from('rate_history')
-      .select('*')
-      .gte('recorded_at', startDate.toISOString())
-      .order('recorded_at', { ascending: true });
+    const historicalData = await getHistoricalRatesWithSpreads(period);
 
-    if (lenderId) {
-      query = query.eq('lender_id', lenderId);
+    // If specific rate type requested, filter the data
+    let filteredData = historicalData;
+    if (rateType) {
+      const rateKey = `rate_${rateType.toLowerCase().replace('-', '_').replace('/', '_')}` as keyof typeof historicalData[0];
+      filteredData = historicalData.map(entry => ({
+        date: entry.date,
+        rate: entry[rateKey] as number || entry.rate_30yr,
+      })) as any;
     }
 
-    const { data: historyData, error } = await query;
+    // Calculate start and end dates
+    const dates = historicalData.map(d => d.date);
+    const startDate = dates[0] || '';
+    const endDate = dates[dates.length - 1] || '';
 
-    if (error) {
-      console.error('Error fetching historical rates:', error);
-      throw error;
-    }
+    const response: HistoricalRatesResponse = {
+      success: true,
+      data: filteredData,
+      period,
+      start_date: startDate,
+      end_date: endDate,
+      timestamp: new Date().toISOString(),
+    };
 
-    const groupedData: Record<string, any> = {};
-
-    historyData?.forEach((record) => {
-      const date = new Date(record.recorded_at).toISOString().split('T')[0];
-      
-      if (!groupedData[date]) {
-        groupedData[date] = {
-          date,
-          rate_30y: [],
-          rate_15y: [],
-          rate_fha: [],
-          rate_va: [],
-          rate_arm: [],
-        };
-      }
-
-      if (record.term_years === 30) {
-        groupedData[date].rate_30y.push(record.rate);
-      } else if (record.term_years === 15) {
-        groupedData[date].rate_15y.push(record.rate);
-      }
-
-      if (record.loan_type === 'fha') {
-        groupedData[date].rate_fha.push(record.rate);
-      } else if (record.loan_type === 'va') {
-        groupedData[date].rate_va.push(record.rate);
-      } else if (record.loan_type === 'arm') {
-        groupedData[date].rate_arm.push(record.rate);
-      }
-    });
-
-    const data = Object.values(groupedData).map((day: any) => ({
-      date: day.date,
-      rate_30y: day.rate_30y.length > 0 
-        ? day.rate_30y.reduce((a: number, b: number) => a + b, 0) / day.rate_30y.length 
-        : 0,
-      rate_15y: day.rate_15y.length > 0 
-        ? day.rate_15y.reduce((a: number, b: number) => a + b, 0) / day.rate_15y.length 
-        : 0,
-      rate_fha: day.rate_fha.length > 0 
-        ? day.rate_fha.reduce((a: number, b: number) => a + b, 0) / day.rate_fha.length 
-        : 0,
-      rate_va: day.rate_va.length > 0 
-        ? day.rate_va.reduce((a: number, b: number) => a + b, 0) / day.rate_va.length 
-        : 0,
-      rate_arm: day.rate_arm.length > 0 
-        ? day.rate_arm.reduce((a: number, b: number) => a + b, 0) / day.rate_arm.length 
-        : 0,
-    }));
-
-    return NextResponse.json({
-      data,
-      range,
-      lender_id: lenderId,
-      start_date: startDate.toISOString(),
-      end_date: now.toISOString(),
+    return NextResponse.json(response, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=7200, stale-while-revalidate=86400',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      },
     });
   } catch (error) {
-    console.error('Error in historical API:', error);
+    console.error('Error fetching historical rates:', error);
+    
     return NextResponse.json(
-      { error: 'Failed to fetch historical data' },
-      { status: 500 }
+      {
+        success: false,
+        error: 'Failed to fetch historical rates',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      },
+      { 
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      }
     );
   }
+}
+
+// Handle CORS preflight
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400',
+    },
+  });
 }
