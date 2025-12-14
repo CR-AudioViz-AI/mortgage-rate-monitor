@@ -1,14 +1,22 @@
+// CR AudioViz AI - Mortgage Rate Monitor
+// Homepage - NO DUPLICATE HEADER (uses global Header from layout)
+// Fixed: December 14, 2025
+
 'use client';
 
-// Mortgage Rate Monitor - Main Page
-// CR AudioViz AI
-// Roy Henderson @ December 2025
-
 import { useState, useEffect } from 'react';
-import { RefreshCw, TrendingUp, TrendingDown, Calculator, Bell, ExternalLink } from 'lucide-react';
-import MortgageRateCard from '@/components/MortgageRateCard';
-import RateChart from '@/components/RateChart';
-import type { MortgageRate } from '@/types/mortgage';
+import { RefreshCw, TrendingUp, TrendingDown, ArrowRight, Shield, Clock, BarChart3 } from 'lucide-react';
+import Link from 'next/link';
+
+interface MortgageRate {
+  rateType: string;
+  rate: number;
+  apr?: number;
+  change: number;
+  previousRate?: number;
+  source: string;
+  lastUpdated?: string;
+}
 
 export default function HomePage() {
   const [rates, setRates] = useState<MortgageRate[]>([]);
@@ -50,17 +58,12 @@ export default function HomePage() {
 
   useEffect(() => {
     fetchRates();
-    
-    // Auto-refresh every 15 minutes
     const interval = setInterval(() => fetchRates(), 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Get primary rates for hero section
   const rate30Y = rates.find(r => r.rateType === '30-Year Fixed');
   const rate15Y = rates.find(r => r.rateType === '15-Year Fixed');
-
-  // Separate official and calculated rates
   const officialRates = rates.filter(r => r.source === 'FRED');
   const calculatedRates = rates.filter(r => r.source === 'CALCULATED');
 
@@ -77,229 +80,191 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      {/* Sub-header with refresh */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Mortgage Rate Monitor</h1>
-                <p className="text-sm text-gray-500">Powered by CR AudioViz AI</p>
-              </div>
+            <div className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-green-600" />
+              <span className="text-sm text-gray-600">
+                Official rates from Freddie Mac via Federal Reserve
+              </span>
             </div>
-            
             <div className="flex items-center gap-4">
               {lastUpdated && (
                 <span className="text-sm text-gray-500 hidden sm:block">
-                  Updated: {new Date(lastUpdated).toLocaleString()}
+                  <Clock className="w-4 h-4 inline mr-1" />
+                  {new Date(lastUpdated).toLocaleString()}
                 </span>
               )}
               <button
                 onClick={() => fetchRates(true)}
                 disabled={refreshing}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
               >
                 <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">Refresh</span>
+                Refresh
               </button>
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
-            <p className="font-medium">Error loading rates</p>
-            <p className="text-sm mt-1">{error}</p>
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+            {error}
           </div>
         )}
 
-        {/* Hero Section - Primary Rates */}
-        <section className="mb-10">
-          <div className="grid md:grid-cols-2 gap-6">
-            {rate30Y && (
-              <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-8 text-white">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-medium opacity-90">30-Year Fixed Rate</h2>
-                  <span className="px-3 py-1 bg-white/20 rounded-full text-sm">Official</span>
-                </div>
-                <div className="mb-4">
-                  <span className="text-6xl font-bold">{rate30Y.rate.toFixed(2)}</span>
-                  <span className="text-3xl ml-1">%</span>
-                </div>
-                <div className="flex items-center gap-3 text-white/80">
-                  {rate30Y.change > 0 ? (
-                    <TrendingUp className="w-5 h-5 text-red-300" />
-                  ) : rate30Y.change < 0 ? (
-                    <TrendingDown className="w-5 h-5 text-green-300" />
-                  ) : null}
-                  <span>
-                    {rate30Y.change > 0 ? '+' : ''}{rate30Y.change.toFixed(3)}% from last week
-                  </span>
-                </div>
-                <p className="mt-4 text-sm text-white/60">
-                  Source: Freddie Mac Primary Mortgage Market Survey
-                </p>
-              </div>
+        {/* Hero Rate Cards */}
+        <div className="grid md:grid-cols-2 gap-6 mb-8">
+          {/* 30-Year Fixed */}
+          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-xl">
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-xl font-semibold">30-Year Fixed Rate</h2>
+              <span className="px-3 py-1 bg-white/20 rounded-full text-sm">Official</span>
+            </div>
+            <div className="text-5xl font-bold mb-2">
+              {rate30Y?.rate.toFixed(2) || '--'}%
+            </div>
+            {rate30Y?.apr && (
+              <div className="text-blue-100 mb-3">APR: {rate30Y.apr.toFixed(3)}%</div>
             )}
-
-            {rate15Y && (
-              <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-2xl p-8 text-white">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-medium opacity-90">15-Year Fixed Rate</h2>
-                  <span className="px-3 py-1 bg-white/20 rounded-full text-sm">Official</span>
-                </div>
-                <div className="mb-4">
-                  <span className="text-6xl font-bold">{rate15Y.rate.toFixed(2)}</span>
-                  <span className="text-3xl ml-1">%</span>
-                </div>
-                <div className="flex items-center gap-3 text-white/80">
-                  {rate15Y.change > 0 ? (
-                    <TrendingUp className="w-5 h-5 text-red-300" />
-                  ) : rate15Y.change < 0 ? (
-                    <TrendingDown className="w-5 h-5 text-green-300" />
-                  ) : null}
-                  <span>
-                    {rate15Y.change > 0 ? '+' : ''}{rate15Y.change.toFixed(3)}% from last week
-                  </span>
-                </div>
-                <p className="mt-4 text-sm text-white/60">
-                  Source: Freddie Mac Primary Mortgage Market Survey
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Historical Chart */}
-        <section className="mb-10">
-          <RateChart />
-        </section>
-
-        {/* Calculated/Estimated Rates */}
-        <section className="mb-10">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">All Rate Types</h2>
-              <p className="text-gray-500 mt-1">
-                Estimated rates based on market spreads
-              </p>
+            <div className={`flex items-center gap-2 ${(rate30Y?.change || 0) < 0 ? 'text-green-300' : 'text-red-300'}`}>
+              {(rate30Y?.change || 0) < 0 ? <TrendingDown className="w-5 h-5" /> : <TrendingUp className="w-5 h-5" />}
+              <span>{(rate30Y?.change || 0) > 0 ? '+' : ''}{rate30Y?.change?.toFixed(3) || '0.000'}% from last week</span>
+            </div>
+            <div className="mt-4 text-sm text-blue-200">
+              Source: Freddie Mac Primary Mortgage Market Survey
             </div>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {calculatedRates.map((rate) => (
-              <MortgageRateCard key={rate.rateType} rate={rate} showDetails={true} />
-            ))}
-          </div>
-        </section>
-
-        {/* Quick Links */}
-        <section className="mb-10">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <a
-              href="/calculators"
-              className="flex items-center gap-4 p-6 bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-shadow"
-            >
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <Calculator className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Mortgage Calculator</h3>
-                <p className="text-sm text-gray-500">Calculate your payment</p>
-              </div>
-            </a>
-
-            <a
-              href="/compare"
-              className="flex items-center gap-4 p-6 bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-shadow"
-            >
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Compare Rates</h3>
-                <p className="text-sm text-gray-500">Side-by-side comparison</p>
-              </div>
-            </a>
-
-            <a
-              href="/dashboard"
-              className="flex items-center gap-4 p-6 bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-shadow"
-            >
-              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
-                <Bell className="w-6 h-6 text-amber-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Rate Alerts</h3>
-                <p className="text-sm text-gray-500">Get notified on changes</p>
-              </div>
-            </a>
-
-            <a
-              href="/api-docs"
-              className="flex items-center gap-4 p-6 bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-shadow"
-            >
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <ExternalLink className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">API Access</h3>
-                <p className="text-sm text-gray-500">Integrate our data</p>
-              </div>
-            </a>
-          </div>
-        </section>
-
-        {/* Data Attribution */}
-        <section className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">About This Data</h3>
-          <div className="prose prose-sm text-gray-600 max-w-none">
-            <p>
-              <strong>Official Rates (30-Year & 15-Year Fixed):</strong> Sourced directly from the 
-              Federal Reserve Economic Data (FRED) API, which publishes Freddie Mac&apos;s Primary 
-              Mortgage Market Survey (PMMS) data. Updated weekly on Thursdays.
-            </p>
-            <p className="mt-3">
-              <strong>Estimated Rates (ARM, FHA, VA, Jumbo):</strong> Calculated using industry-standard 
-              spreads relative to the official 30-Year and 15-Year fixed rates. These are approximations 
-              based on typical market conditions and may vary by lender.
-            </p>
-            <p className="mt-3 text-xs text-gray-500">
-              Data provided for informational purposes only. Contact a licensed mortgage professional 
-              for actual rate quotes. CR AudioViz AI is not a lender.
-            </p>
-          </div>
-        </section>
-      </main>
-
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-gray-600">© 2025 CR AudioViz AI, LLC</span>
-              <span className="text-gray-400">|</span>
-              <span className="text-gray-500">Your Story. Our Design.</span>
+          {/* 15-Year Fixed */}
+          <div className="bg-gradient-to-br from-green-600 to-emerald-700 rounded-2xl p-6 text-white shadow-xl">
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-xl font-semibold">15-Year Fixed Rate</h2>
+              <span className="px-3 py-1 bg-white/20 rounded-full text-sm">Official</span>
             </div>
-            <div className="flex items-center gap-4 text-sm text-gray-500">
-              <a href="https://craudiovizai.com" className="hover:text-blue-600 transition-colors">
-                Main Site
-              </a>
-              <a href="/api-docs" className="hover:text-blue-600 transition-colors">
-                API Docs
-              </a>
-              <a href="/pricing" className="hover:text-blue-600 transition-colors">
-                Pricing
-              </a>
+            <div className="text-5xl font-bold mb-2">
+              {rate15Y?.rate.toFixed(2) || '--'}%
+            </div>
+            {rate15Y?.apr && (
+              <div className="text-green-100 mb-3">APR: {rate15Y.apr.toFixed(3)}%</div>
+            )}
+            <div className={`flex items-center gap-2 ${(rate15Y?.change || 0) < 0 ? 'text-green-300' : 'text-red-300'}`}>
+              {(rate15Y?.change || 0) < 0 ? <TrendingDown className="w-5 h-5" /> : <TrendingUp className="w-5 h-5" />}
+              <span>{(rate15Y?.change || 0) > 0 ? '+' : ''}{rate15Y?.change?.toFixed(3) || '0.000'}% from last week</span>
+            </div>
+            <div className="mt-4 text-sm text-green-200">
+              Source: Freddie Mac Primary Mortgage Market Survey
             </div>
           </div>
         </div>
-      </footer>
+
+        {/* All Rates Grid */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">All Mortgage Rates</h2>
+            <Link 
+              href="/rates"
+              className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
+            >
+              View Details <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {rates.map((rate) => (
+              <div 
+                key={rate.rateType}
+                className="border border-gray-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-md transition"
+              >
+                <div className="text-sm text-gray-500 mb-1">{rate.rateType}</div>
+                <div className="text-2xl font-bold text-gray-900">{rate.rate.toFixed(2)}%</div>
+                {rate.apr && (
+                  <div className="text-xs text-gray-500">APR: {rate.apr.toFixed(3)}%</div>
+                )}
+                <div className={`flex items-center gap-1 text-sm mt-2 ${
+                  rate.change < 0 ? 'text-green-600' : rate.change > 0 ? 'text-red-600' : 'text-gray-500'
+                }`}>
+                  {rate.change < 0 ? <TrendingDown className="w-4 h-4" /> : <TrendingUp className="w-4 h-4" />}
+                  {rate.change > 0 ? '+' : ''}{rate.change.toFixed(3)}%
+                </div>
+                <div className="mt-2">
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    rate.source === 'FRED' 
+                      ? 'bg-green-100 text-green-700' 
+                      : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {rate.source === 'FRED' ? 'Official' : 'Calculated'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Quick Links */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Link 
+            href="/compare"
+            className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition group"
+          >
+            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-200 transition">
+              <BarChart3 className="w-6 h-6 text-blue-600" />
+            </div>
+            <h3 className="font-semibold text-gray-900 mb-2">Compare Lenders</h3>
+            <p className="text-sm text-gray-600">Compare 390+ verified lenders with real rates</p>
+          </Link>
+
+          <Link 
+            href="/calculators"
+            className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition group"
+          >
+            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-green-200 transition">
+              <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <rect x="4" y="2" width="16" height="20" rx="2" strokeWidth={2} />
+                <line x1="8" y1="6" x2="16" y2="6" strokeWidth={2} />
+              </svg>
+            </div>
+            <h3 className="font-semibold text-gray-900 mb-2">Calculators</h3>
+            <p className="text-sm text-gray-600">Payment, affordability, refinance & more</p>
+          </Link>
+
+          <Link 
+            href="/alerts"
+            className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition group"
+          >
+            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-purple-200 transition">
+              <svg className="w-6 h-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            </div>
+            <h3 className="font-semibold text-gray-900 mb-2">Rate Alerts</h3>
+            <p className="text-sm text-gray-600">Get notified when rates hit your target</p>
+          </Link>
+
+          <Link 
+            href="/historical"
+            className="bg-white rounded-xl p-6 shadow-lg hover:shadow-xl transition group"
+          >
+            <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-orange-200 transition">
+              <svg className="w-6 h-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <h3 className="font-semibold text-gray-900 mb-2">Historical Data</h3>
+            <p className="text-sm text-gray-600">52+ weeks of rate history & trends</p>
+          </Link>
+        </div>
+
+        {/* Data Source Attribution */}
+        <div className="mt-8 text-center text-sm text-gray-500">
+          <p>Data sourced from Federal Reserve Economic Data (FRED) via Freddie Mac Primary Mortgage Market Survey</p>
+          <p className="mt-1">Updated weekly on Thursdays • Real-time Treasury yields</p>
+        </div>
+      </div>
     </div>
   );
 }
