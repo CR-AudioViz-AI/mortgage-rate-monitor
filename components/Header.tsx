@@ -1,6 +1,6 @@
 // CR AudioViz AI - Mortgage Rate Monitor
-// Shared Header Component - Static across all pages
-// Created: 2025-12-14
+// Shared Header Component - Fixed navigation (Home = Current Rates)
+// Updated: December 14, 2025
 
 'use client';
 
@@ -8,13 +8,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { 
-  Home, TrendingUp, Calculator, Bell, Users, 
-  BarChart3, Menu, X, DollarSign, FileText
+  TrendingUp, Calculator, Bell, Users, 
+  BarChart3, Menu, X, DollarSign, FileText, Home
 } from 'lucide-react';
 
+// Combined Home and Current Rates - they're the same page now
 const navigation = [
-  { name: 'Home', href: '/', icon: Home },
-  { name: 'Current Rates', href: '/rates', icon: TrendingUp },
+  { name: 'Current Rates', href: '/', icon: TrendingUp, alsoMatches: ['/rates'] },
   { name: 'Compare Lenders', href: '/compare', icon: Users },
   { name: 'Calculators', href: '/calculators', icon: Calculator },
   { name: 'Rate Alerts', href: '/alerts', icon: Bell },
@@ -49,6 +49,7 @@ export default function Header() {
             {navigation.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href || 
+                (item.alsoMatches && item.alsoMatches.includes(pathname)) ||
                 (item.href !== '/' && pathname.startsWith(item.href));
               
               return (
@@ -79,26 +80,30 @@ export default function Header() {
           </div>
 
           {/* Mobile menu button */}
-          <button
-            type="button"
-            className="lg:hidden p-2 text-gray-600 hover:text-gray-900"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? (
-              <X className="w-6 h-6" />
-            ) : (
-              <Menu className="w-6 h-6" />
-            )}
-          </button>
+          <div className="lg:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
+            >
+              {mobileMenuOpen ? (
+                <X className="h-6 w-6" />
+              ) : (
+                <Menu className="h-6 w-6" />
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
-          <div className="lg:hidden py-4 border-t border-gray-100">
+          <div className="lg:hidden py-4 border-t border-gray-200">
             <div className="space-y-1">
               {navigation.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href;
+                const isActive = pathname === item.href ||
+                  (item.alsoMatches && item.alsoMatches.includes(pathname)) ||
+                  (item.href !== '/' && pathname.startsWith(item.href));
                 
                 return (
                   <Link
@@ -116,15 +121,13 @@ export default function Header() {
                   </Link>
                 );
               })}
-              <div className="pt-4 px-4">
-                <Link
-                  href="/dashboard"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-blue-600 text-white font-semibold rounded-lg"
-                >
-                  Dashboard
-                </Link>
-              </div>
+              <Link
+                href="/dashboard"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 text-sm font-medium bg-blue-600 text-white rounded-lg mt-4"
+              >
+                Dashboard
+              </Link>
             </div>
           </div>
         )}
