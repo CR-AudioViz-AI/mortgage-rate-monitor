@@ -1,6 +1,6 @@
 // CR AudioViz AI - Mortgage Rate Monitor
-// User Dashboard - Profile, alerts, saved lenders, subscription
-// December 14, 2025
+// User Dashboard - Handles unconfigured auth gracefully
+// December 15, 2025
 
 'use client';
 
@@ -9,10 +9,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
-  User, Bell, Heart, Settings, LogOut, MapPin, 
+  User, Bell, Settings, LogOut, MapPin, 
   TrendingDown, TrendingUp, Crown, CheckCircle,
-  AlertCircle, Plus, Trash2, Edit2, CreditCard,
-  Home, Calculator, Users, BarChart3, ExternalLink
+  AlertCircle, Plus, Trash2, CreditCard,
+  Home, Calculator, Users, BarChart3
 } from 'lucide-react';
 
 const US_STATES = [
@@ -46,7 +46,7 @@ interface RateAlert {
 }
 
 export default function DashboardPage() {
-  const { user, profile, loading, signOut, updateProfile } = useAuth();
+  const { user, profile, loading, signOut, updateProfile, isConfigured } = useAuth();
   const router = useRouter();
   const [alerts, setAlerts] = useState<RateAlert[]>([]);
   const [currentRates, setCurrentRates] = useState<any[]>([]);
@@ -54,15 +54,16 @@ export default function DashboardPage() {
   const [selectedState, setSelectedState] = useState(profile?.state || '');
 
   useEffect(() => {
-    if (!loading && !user) {
+    // Only redirect if auth is configured and user is not logged in
+    if (!loading && isConfigured && !user) {
       router.push('/login?redirect=/dashboard');
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, isConfigured]);
 
   useEffect(() => {
+    fetchCurrentRates();
     if (user) {
       fetchAlerts();
-      fetchCurrentRates();
     }
   }, [user]);
 
@@ -71,8 +72,9 @@ export default function DashboardPage() {
   }, [profile]);
 
   async function fetchAlerts() {
+    if (!user?.email) return;
     try {
-      const response = await fetch(`/api/alerts?email=${encodeURIComponent(user?.email || '')}`);
+      const response = await fetch(`/api/alerts?email=${encodeURIComponent(user.email)}`);
       const data = await response.json();
       if (data.success) {
         setAlerts(data.alerts || []);
@@ -95,7 +97,7 @@ export default function DashboardPage() {
   }
 
   async function handleStateUpdate() {
-    if (selectedState) {
+    if (selectedState && updateProfile) {
       await updateProfile({ state: selectedState });
       localStorage.setItem('mortgage_user_state', selectedState);
       setEditingState(false);
@@ -131,10 +133,80 @@ export default function DashboardPage() {
     );
   }
 
-  if (!user) {
-    return null;
+  // If auth is not configured, show a preview dashboard
+  if (!isConfigured) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white py-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+              <div>
+                <h1 className="text-3xl font-bold mb-1">Dashboard Preview</h1>
+                <p className="text-blue-100">User accounts coming soon!</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Notice */}
+          <div className="mb-8 p-6 bg-yellow-50 border border-yellow-200 rounded-xl">
+            <div className="flex items-start gap-3">
+              <Settings className="w-6 h-6 text-yellow-600 mt-0.5" />
+              <div>
+                <h3 className="font-semibold text-yellow-800 text-lg">Authentication Coming Soon</h3>
+                <p className="text-yellow-700 mt-1">
+                  User accounts, rate alerts, and personalized dashboards are being set up. 
+                  In the meantime, explore all our free features!
+                </p>
+                <div className="flex flex-wrap gap-3 mt-4">
+                  <Link href="/" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    View Current Rates
+                  </Link>
+                  <Link href="/compare" className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    Compare Lenders
+                  </Link>
+                  <Link href="/calculators" className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    Use Calculators
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Current Rates Summary */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Today&apos;s Key Rates</h2>
+              <Link href="/" className="text-blue-600 text-sm hover:underline">View All</Link>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {currentRates.slice(0, 4).map(rate => (
+                <div key={rate.rateType} className="bg-gray-50 rounded-lg p-3">
+                  <div className="text-sm text-gray-500 mb-1">{rate.rateType}</div>
+                  <div className="text-2xl font-bold text-gray-900">{rate.rate?.toFixed(2)}%</div>
+                  <div className={`text-sm flex items-center gap-1 ${
+                    rate.change < 0 ? 'text-green-600' : rate.change > 0 ? 'text-red-600' : 'text-gray-500'
+                  }`}>
+                    {rate.change < 0 ? <TrendingDown className="w-3 h-3" /> : rate.change > 0 ? <TrendingUp className="w-3 h-3" /> : null}
+                    {rate.change?.toFixed(3)}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
+  // If user is not logged in but auth is configured
+  if (!user) {
+    return null; // Will redirect via useEffect
+  }
+
+  // Full dashboard for logged-in users
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -230,7 +302,7 @@ export default function DashboardPage() {
                 <div>
                   <label className="text-sm text-gray-500">Member Since</label>
                   <p className="font-medium text-gray-900">
-                    {new Date(profile?.created_at || user.created_at).toLocaleDateString('en-US', {
+                    {new Date(profile?.created_at || user.created_at || Date.now()).toLocaleDateString('en-US', {
                       month: 'long',
                       year: 'numeric'
                     })}
@@ -278,7 +350,7 @@ export default function DashboardPage() {
             {/* Current Rates Summary */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Today's Key Rates</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Today&apos;s Key Rates</h2>
                 <Link href="/" className="text-blue-600 text-sm hover:underline">View All</Link>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
