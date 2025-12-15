@@ -1,6 +1,6 @@
 // CR AudioViz AI - Mortgage Rate Monitor
 // Pricing Page - Free, Pro, Agent tiers
-// December 14, 2025
+// December 15, 2025
 
 'use client';
 
@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { 
   Check, X, Zap, Crown, Building2, Star,
   Bell, BarChart3, Download, Users, Code,
-  Shield, Clock, Calculator, TrendingUp
+  Shield, Calculator, TrendingUp
 } from 'lucide-react';
 
 const plans = [
@@ -115,7 +115,7 @@ const faqs = [
 ];
 
 export default function PricingPage() {
-  const { user, profile } = useAuth();
+  const { user, profile, isConfigured } = useAuth();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
   const getPrice = (plan: typeof plans[0]) => {
@@ -123,16 +123,17 @@ export default function PricingPage() {
     return billingCycle === 'yearly' ? (plan.priceYearly || plan.price * 10) : plan.priceMonthly;
   };
 
-  const getPriceDisplay = (plan: typeof plans[0]) => {
-    const price = getPrice(plan);
-    if (price === 0) return 'Free';
-    return `$${price}${billingCycle === 'yearly' ? '/year' : '/mo'}`;
-  };
-
   const getSavings = (plan: typeof plans[0]) => {
     if (!plan.priceYearly) return 0;
     const monthlyCost = plan.priceMonthly * 12;
     return monthlyCost - plan.priceYearly;
+  };
+
+  const getCtaHref = (plan: typeof plans[0]) => {
+    if (plan.id === 'free') {
+      return isConfigured ? (user ? '/dashboard' : '/login') : '/';
+    }
+    return isConfigured ? (user ? `/checkout?plan=${plan.id}&cycle=${billingCycle}` : `/login?redirect=/pricing`) : '/login';
   };
 
   return (
@@ -232,7 +233,7 @@ export default function PricingPage() {
                     </div>
                   ) : (
                     <Link
-                      href={user ? `/checkout?plan=${plan.id}&cycle=${billingCycle}` : `/login?redirect=/pricing`}
+                      href={getCtaHref(plan)}
                       className={`block w-full py-3 font-semibold rounded-xl text-center transition ${
                         plan.popular
                           ? 'bg-blue-600 text-white hover:bg-blue-700'
@@ -277,7 +278,7 @@ export default function PricingPage() {
       {/* Feature Highlights */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <h2 className="text-2xl font-bold text-gray-900 text-center mb-12">
-          What's Included in Every Plan
+          What&apos;s Included in Every Plan
         </h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {[
@@ -318,7 +319,7 @@ export default function PricingPage() {
               },
               {
                 title: 'Branded Share Links',
-                desc: 'Send clients a rates.craudiovizai.com/your-name link that showcases your professionalism.',
+                desc: 'Send clients personalized rate links that showcase your professionalism.',
                 icon: Users,
               },
               {
@@ -364,7 +365,7 @@ export default function PricingPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
-              href={user ? '/dashboard' : '/login'}
+              href={isConfigured ? (user ? '/dashboard' : '/login') : '/'}
               className="px-8 py-3 bg-white text-gray-900 font-semibold rounded-xl hover:bg-gray-100 transition"
             >
               Get Started Free
