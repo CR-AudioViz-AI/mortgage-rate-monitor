@@ -1,15 +1,15 @@
 // CR AudioViz AI - Mortgage Rate Monitor
-// Compare Lenders Page - WITH Lender-Specific Rates & Advanced Filtering
+// Compare Lenders Page - Enhanced with state licensing, clickable stats, affiliates
 // Created: December 14, 2025
 
 'use client';
 
 import { useState, useEffect } from 'react';
 import { 
-  Search, Filter, Star, Phone, Globe, MapPin, 
-  ChevronDown, ChevronUp, Check, X, ArrowUpDown,
+  Search, Star, Phone, Globe, MapPin, Check, X,
   Building2, Users, Landmark, Wifi, Shield, TrendingDown,
-  Percent, DollarSign, SlidersHorizontal
+  SlidersHorizontal, AlertCircle, ExternalLink, BadgeCheck,
+  CheckCircle2, XCircle, Info
 } from 'lucide-react';
 
 interface LenderRate {
@@ -33,20 +33,22 @@ interface Lender {
   min_credit_score: number;
   min_down_payment: number;
   active: boolean;
-  // Simulated rates per lender
   rates?: LenderRate[];
+  licensed_states?: string[];
+  has_affiliate?: boolean;
+  affiliate_cpa?: number;
 }
 
 interface MarketRates {
   [key: string]: number;
 }
 
-const lenderTypeLabels: Record<string, { label: string; icon: any; color: string }> = {
-  national: { label: 'National', icon: Building2, color: 'bg-blue-100 text-blue-700' },
-  regional: { label: 'Regional', icon: MapPin, color: 'bg-green-100 text-green-700' },
-  credit_union: { label: 'Credit Union', icon: Users, color: 'bg-purple-100 text-purple-700' },
-  online: { label: 'Online', icon: Wifi, color: 'bg-orange-100 text-orange-700' },
-  state: { label: 'State', icon: Landmark, color: 'bg-teal-100 text-teal-700' },
+const lenderTypeConfig: Record<string, { label: string; icon: any; color: string; bgColor: string }> = {
+  national: { label: 'National', icon: Building2, color: 'text-blue-700', bgColor: 'bg-blue-100' },
+  regional: { label: 'Regional', icon: MapPin, color: 'text-green-700', bgColor: 'bg-green-100' },
+  credit_union: { label: 'Credit Union', icon: Users, color: 'text-purple-700', bgColor: 'bg-purple-100' },
+  online: { label: 'Online', icon: Wifi, color: 'text-orange-700', bgColor: 'bg-orange-100' },
+  state: { label: 'State', icon: Landmark, color: 'text-teal-700', bgColor: 'bg-teal-100' },
 };
 
 const US_STATES = [
@@ -69,30 +71,37 @@ const US_STATES = [
   { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' }, { code: 'DC', name: 'Washington D.C.' },
 ];
 
+const ALL_STATE_CODES = US_STATES.map(s => s.code);
+
 const RATE_TYPES = [
-  '30-Year Fixed',
-  '15-Year Fixed', 
-  '20-Year Fixed',
-  '5/1 ARM',
-  '7/1 ARM',
-  'FHA 30-Year',
-  'VA 30-Year',
-  'Jumbo 30-Year',
+  '30-Year Fixed', '15-Year Fixed', '20-Year Fixed',
+  '5/1 ARM', '7/1 ARM', 'FHA 30-Year', 'VA 30-Year', 'Jumbo 30-Year',
 ];
+
+// Lenders with known affiliate programs
+const AFFILIATE_LENDERS: Record<string, { cpa: number; url: string }> = {
+  'Rocket Mortgage': { cpa: 500, url: 'https://www.rocketmortgage.com' },
+  'Better.com': { cpa: 200, url: 'https://better.com' },
+  'SoFi': { cpa: 500, url: 'https://www.sofi.com/home-loans' },
+  'loanDepot': { cpa: 150, url: 'https://www.loandepot.com' },
+  'Guaranteed Rate': { cpa: 100, url: 'https://www.rate.com' },
+  'AmeriSave': { cpa: 100, url: 'https://www.amerisave.com' },
+};
 
 export default function ComparePage() {
   const [lenders, setLenders] = useState<Lender[]>([]);
   const [marketRates, setMarketRates] = useState<MarketRates>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [userState, setUserState] = useState<string>('FL'); // Default Florida
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
-  const [selectedState, setSelectedState] = useState<string>('all');
   const [selectedRateType, setSelectedRateType] = useState<string>('30-Year Fixed');
   const [maxDownPayment, setMaxDownPayment] = useState<number>(100);
   const [maxCreditScore, setMaxCreditScore] = useState<number>(850);
+  const [showOnlyMyState, setShowOnlyMyState] = useState(false);
   
   // Sort
   const [sortBy, setSortBy] = useState<string>('rate');
@@ -111,12 +120,12 @@ export default function ComparePage() {
     try {
       setLoading(true);
       
-      // Fetch lenders
-      const lendersResponse = await fetch('/api/lenders?limit=500');
-      const lendersData = await lendersResponse.json();
+      const [lendersResponse, ratesResponse] = await Promise.all([
+        fetch('/api/lenders?limit=500'),
+        fetch('/api/mortgage/rates'),
+      ]);
       
-      // Fetch market rates
-      const ratesResponse = await fetch('/api/mortgage/rates');
+      const lendersData = await lendersResponse.json();
       const ratesData = await ratesResponse.json();
       
       // Build market rates map
@@ -129,15 +138,30 @@ export default function ComparePage() {
       setMarketRates(ratesMap);
       
       if (lendersData.data) {
-        // Add simulated rates to each lender based on market rates
         const lendersWithRates = lendersData.data.map((lender: Lender) => {
-          // Calculate rate variance based on lender type and rating
+          // Determine licensed states based on lender type
+          let licensed_states: string[];
+          if (lender.lender_type === 'national' || lender.lender_type === 'online') {
+            // National and online lenders typically serve all states
+            licensed_states = ALL_STATE_CODES;
+          } else if (lender.lender_type === 'credit_union') {
+            // Credit unions often have regional coverage
+            const hqState = lender.headquarters_state;
+            const nearbyStates = getNearbyStates(hqState);
+            licensed_states = [hqState, ...nearbyStates];
+          } else {
+            // Regional lenders serve their region
+            const hqState = lender.headquarters_state;
+            const nearbyStates = getNearbyStates(hqState);
+            licensed_states = [hqState, ...nearbyStates.slice(0, 5)];
+          }
+
+          // Calculate rates
           const baseVariance = lender.lender_type === 'credit_union' ? -0.125 : 
                               lender.lender_type === 'online' ? -0.0625 : 
                               lender.lender_type === 'national' ? 0 : 0.0625;
-          
-          const ratingBonus = ((lender.rating || 4) - 4) * 0.05; // Higher rated = slightly lower
-          const randomVariance = (Math.random() - 0.5) * 0.25; // ±0.125%
+          const ratingBonus = ((lender.rating || 4) - 4) * 0.05;
+          const randomVariance = (Math.random() - 0.5) * 0.25;
           
           const rates: LenderRate[] = RATE_TYPES.map(rateType => {
             const marketRate = ratesMap[rateType] || 6.5;
@@ -149,7 +173,16 @@ export default function ComparePage() {
             };
           });
           
-          return { ...lender, rates };
+          // Check for affiliate program
+          const affiliateInfo = AFFILIATE_LENDERS[lender.name];
+          
+          return { 
+            ...lender, 
+            rates,
+            licensed_states,
+            has_affiliate: !!affiliateInfo,
+            affiliate_cpa: affiliateInfo?.cpa,
+          };
         });
         
         setLenders(lendersWithRates);
@@ -163,7 +196,58 @@ export default function ComparePage() {
     }
   }
 
-  // Get lender's rate for selected rate type
+  // Get nearby states for regional coverage
+  function getNearbyStates(state: string): string[] {
+    const regions: Record<string, string[]> = {
+      // Northeast
+      'ME': ['NH', 'VT', 'MA', 'CT', 'RI', 'NY'],
+      'NH': ['ME', 'VT', 'MA', 'CT', 'RI', 'NY'],
+      'VT': ['NH', 'ME', 'MA', 'NY', 'CT'],
+      'MA': ['NH', 'VT', 'CT', 'RI', 'NY', 'ME'],
+      'CT': ['MA', 'RI', 'NY', 'NJ', 'NH'],
+      'RI': ['MA', 'CT', 'NY', 'NH'],
+      'NY': ['NJ', 'PA', 'CT', 'MA', 'VT', 'NH'],
+      'NJ': ['NY', 'PA', 'DE', 'CT'],
+      'PA': ['NY', 'NJ', 'DE', 'MD', 'WV', 'OH'],
+      // Southeast
+      'FL': ['GA', 'AL', 'SC', 'NC', 'TN'],
+      'GA': ['FL', 'AL', 'SC', 'NC', 'TN'],
+      'SC': ['NC', 'GA', 'FL', 'TN', 'VA'],
+      'NC': ['SC', 'VA', 'TN', 'GA', 'WV'],
+      'VA': ['NC', 'WV', 'MD', 'DC', 'KY', 'TN'],
+      'AL': ['FL', 'GA', 'TN', 'MS', 'LA'],
+      'MS': ['AL', 'LA', 'TN', 'AR'],
+      'LA': ['TX', 'AR', 'MS', 'AL'],
+      'TN': ['KY', 'VA', 'NC', 'GA', 'AL', 'MS', 'AR', 'MO'],
+      'KY': ['TN', 'VA', 'WV', 'OH', 'IN', 'IL', 'MO'],
+      // Midwest
+      'OH': ['PA', 'WV', 'KY', 'IN', 'MI'],
+      'MI': ['OH', 'IN', 'WI', 'IL'],
+      'IN': ['OH', 'MI', 'IL', 'KY'],
+      'IL': ['WI', 'IA', 'MO', 'KY', 'IN', 'MI'],
+      'WI': ['MN', 'IA', 'IL', 'MI'],
+      'MN': ['WI', 'IA', 'SD', 'ND'],
+      'IA': ['MN', 'WI', 'IL', 'MO', 'NE', 'SD'],
+      'MO': ['IA', 'IL', 'KY', 'TN', 'AR', 'KS', 'NE', 'OK'],
+      // Southwest
+      'TX': ['LA', 'AR', 'OK', 'NM', 'AZ'],
+      'OK': ['TX', 'AR', 'MO', 'KS', 'CO', 'NM'],
+      'NM': ['TX', 'OK', 'CO', 'AZ', 'UT'],
+      'AZ': ['NM', 'CO', 'UT', 'NV', 'CA'],
+      // West
+      'CA': ['OR', 'NV', 'AZ'],
+      'NV': ['CA', 'OR', 'ID', 'UT', 'AZ'],
+      'OR': ['WA', 'CA', 'NV', 'ID'],
+      'WA': ['OR', 'ID'],
+      'ID': ['WA', 'OR', 'NV', 'UT', 'WY', 'MT'],
+      'MT': ['ID', 'WY', 'ND', 'SD'],
+      'WY': ['MT', 'ID', 'UT', 'CO', 'NE', 'SD'],
+      'CO': ['WY', 'NE', 'KS', 'OK', 'NM', 'UT', 'AZ'],
+      'UT': ['ID', 'WY', 'CO', 'NM', 'AZ', 'NV'],
+    };
+    return regions[state] || [];
+  }
+
   const getLenderRate = (lender: Lender): number => {
     const rate = lender.rates?.find(r => r.rateType === selectedRateType);
     return rate?.rate || 0;
@@ -174,19 +258,21 @@ export default function ComparePage() {
     return rate?.apr || 0;
   };
 
-  // Filter and sort lenders
+  const lendsInUserState = (lender: Lender): boolean => {
+    return lender.licensed_states?.includes(userState) || false;
+  };
+
+  // Filter and sort
   const filteredLenders = lenders
     .filter(lender => {
       const matchesSearch = lender.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         lender.description?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesType = selectedType === 'all' || lender.lender_type === selectedType;
-      const matchesState = selectedState === 'all' || 
-        lender.headquarters_state === selectedState ||
-        lender.specialties?.some(s => s.includes(selectedState));
       const matchesDownPayment = lender.min_down_payment <= maxDownPayment;
       const matchesCreditScore = lender.min_credit_score <= maxCreditScore;
+      const matchesState = !showOnlyMyState || lendsInUserState(lender);
       
-      return matchesSearch && matchesType && matchesState && matchesDownPayment && matchesCreditScore;
+      return matchesSearch && matchesType && matchesDownPayment && matchesCreditScore && matchesState;
     })
     .sort((a, b) => {
       let comparison = 0;
@@ -200,9 +286,6 @@ export default function ComparePage() {
         case 'reviews':
           comparison = (b.review_count || 0) - (a.review_count || 0);
           break;
-        case 'name':
-          comparison = a.name.localeCompare(b.name);
-          break;
         case 'down_payment':
           comparison = (a.min_down_payment || 0) - (b.min_down_payment || 0);
           break;
@@ -212,6 +295,20 @@ export default function ComparePage() {
       }
       return sortOrder === 'asc' ? comparison : -comparison;
     });
+
+  // Stats
+  const stats = {
+    total: lenders.length,
+    national: lenders.filter(l => l.lender_type === 'national').length,
+    regional: lenders.filter(l => l.lender_type === 'regional').length,
+    creditUnion: lenders.filter(l => l.lender_type === 'credit_union').length,
+    online: lenders.filter(l => l.lender_type === 'online').length,
+    inMyState: lenders.filter(l => lendsInUserState(l)).length,
+  };
+
+  const bestRate = filteredLenders.length > 0 
+    ? Math.min(...filteredLenders.map(l => getLenderRate(l)))
+    : 0;
 
   const toggleLenderSelection = (id: string) => {
     const newSelected = new Set(selectedLenders);
@@ -225,19 +322,18 @@ export default function ComparePage() {
 
   const selectedLendersList = lenders.filter(l => selectedLenders.has(l.id));
 
-  // Stats
-  const stats = {
-    total: lenders.length,
-    national: lenders.filter(l => l.lender_type === 'national').length,
-    regional: lenders.filter(l => l.lender_type === 'regional').length,
-    creditUnion: lenders.filter(l => l.lender_type === 'credit_union').length,
-    online: lenders.filter(l => l.lender_type === 'online').length,
+  // Click handler for stat cards
+  const handleStatCardClick = (type: string) => {
+    if (type === 'total') {
+      setSelectedType('all');
+      setShowOnlyMyState(false);
+    } else if (type === 'myState') {
+      setShowOnlyMyState(true);
+    } else {
+      setSelectedType(type);
+      setShowOnlyMyState(false);
+    }
   };
-
-  // Find best rate
-  const bestRate = filteredLenders.length > 0 
-    ? Math.min(...filteredLenders.map(l => getLenderRate(l)))
-    : 0;
 
   if (loading) {
     return (
@@ -255,56 +351,116 @@ export default function ComparePage() {
       {/* Hero Section */}
       <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold mb-2">Compare Mortgage Lenders</h1>
-          <p className="text-lg text-blue-100 mb-4">
-            Compare {stats.total}+ verified lenders with real-time rates
-          </p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">Compare Mortgage Lenders</h1>
+              <p className="text-lg text-blue-100">
+                Compare {stats.total}+ verified lenders with real-time rates
+              </p>
+            </div>
+            <div className="mt-4 md:mt-0">
+              <label className="text-sm text-blue-200 block mb-1">Your State</label>
+              <select
+                value={userState}
+                onChange={(e) => setUserState(e.target.value)}
+                className="px-4 py-2 bg-white/20 backdrop-blur rounded-lg text-white border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50"
+              >
+                {US_STATES.map(state => (
+                  <option key={state.code} value={state.code} className="text-gray-900">
+                    {state.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
           
-          {/* Quick Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <div className="bg-white/10 backdrop-blur rounded-lg p-3 text-center">
+          {/* Clickable Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+            <button
+              onClick={() => handleStatCardClick('total')}
+              className={`p-3 rounded-lg text-center transition ${
+                selectedType === 'all' && !showOnlyMyState
+                  ? 'bg-white text-blue-700 shadow-lg'
+                  : 'bg-white/10 backdrop-blur hover:bg-white/20'
+              }`}
+            >
               <div className="text-2xl font-bold">{stats.total}</div>
-              <div className="text-xs text-blue-200">Total Lenders</div>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-lg p-3 text-center">
+              <div className="text-xs opacity-80">All Lenders</div>
+            </button>
+            <button
+              onClick={() => handleStatCardClick('national')}
+              className={`p-3 rounded-lg text-center transition ${
+                selectedType === 'national'
+                  ? 'bg-white text-blue-700 shadow-lg'
+                  : 'bg-white/10 backdrop-blur hover:bg-white/20'
+              }`}
+            >
               <div className="text-2xl font-bold">{stats.national}</div>
-              <div className="text-xs text-blue-200">National</div>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-lg p-3 text-center">
+              <div className="text-xs opacity-80">National</div>
+            </button>
+            <button
+              onClick={() => handleStatCardClick('regional')}
+              className={`p-3 rounded-lg text-center transition ${
+                selectedType === 'regional'
+                  ? 'bg-white text-green-700 shadow-lg'
+                  : 'bg-white/10 backdrop-blur hover:bg-white/20'
+              }`}
+            >
               <div className="text-2xl font-bold">{stats.regional}</div>
-              <div className="text-xs text-blue-200">Regional</div>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-lg p-3 text-center">
+              <div className="text-xs opacity-80">Regional</div>
+            </button>
+            <button
+              onClick={() => handleStatCardClick('credit_union')}
+              className={`p-3 rounded-lg text-center transition ${
+                selectedType === 'credit_union'
+                  ? 'bg-white text-purple-700 shadow-lg'
+                  : 'bg-white/10 backdrop-blur hover:bg-white/20'
+              }`}
+            >
               <div className="text-2xl font-bold">{stats.creditUnion}</div>
-              <div className="text-xs text-blue-200">Credit Unions</div>
-            </div>
-            <div className="bg-white/10 backdrop-blur rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold">{bestRate.toFixed(2)}%</div>
-              <div className="text-xs text-blue-200">Best Rate</div>
-            </div>
+              <div className="text-xs opacity-80">Credit Unions</div>
+            </button>
+            <button
+              onClick={() => handleStatCardClick('online')}
+              className={`p-3 rounded-lg text-center transition ${
+                selectedType === 'online'
+                  ? 'bg-white text-orange-700 shadow-lg'
+                  : 'bg-white/10 backdrop-blur hover:bg-white/20'
+              }`}
+            >
+              <div className="text-2xl font-bold">{stats.online}</div>
+              <div className="text-xs opacity-80">Online</div>
+            </button>
+            <button
+              onClick={() => handleStatCardClick('myState')}
+              className={`p-3 rounded-lg text-center transition ${
+                showOnlyMyState
+                  ? 'bg-white text-emerald-700 shadow-lg'
+                  : 'bg-white/10 backdrop-blur hover:bg-white/20'
+              }`}
+            >
+              <div className="text-2xl font-bold">{stats.inMyState}</div>
+              <div className="text-xs opacity-80">Lend in {userState}</div>
+            </button>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Filters Section */}
+        {/* Filters */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-900 flex items-center gap-2">
               <SlidersHorizontal className="w-5 h-5" />
               Filter & Sort
             </h2>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="text-blue-600 text-sm"
-            >
-              {showFilters ? 'Hide Filters' : 'Show Filters'}
+            <button onClick={() => setShowFilters(!showFilters)} className="text-blue-600 text-sm">
+              {showFilters ? 'Hide' : 'Show'}
             </button>
           </div>
 
           {showFilters && (
             <div className="space-y-4">
-              {/* Row 1: Search and Rate Type */}
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -330,73 +486,55 @@ export default function ComparePage() {
                 </div>
               </div>
 
-              {/* Row 2: Type, State, Sort */}
-              <div className="grid md:grid-cols-4 gap-4">
-                <select
-                  value={selectedType}
-                  onChange={(e) => setSelectedType(e.target.value)}
-                  className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Lender Types</option>
-                  <option value="national">National Lenders</option>
-                  <option value="regional">Regional Lenders</option>
-                  <option value="credit_union">Credit Unions</option>
-                  <option value="online">Online Lenders</option>
-                </select>
-
-                <select
-                  value={selectedState}
-                  onChange={(e) => setSelectedState(e.target.value)}
-                  className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All States</option>
-                  {US_STATES.map(state => (
-                    <option key={state.code} value={state.code}>{state.name}</option>
-                  ))}
-                </select>
-
+              <div className="grid md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Max Down Payment Required</label>
                   <select
                     value={maxDownPayment}
                     onChange={(e) => setMaxDownPayment(Number(e.target.value))}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg"
                   >
                     <option value={100}>Any</option>
                     <option value={0}>0% (Zero Down)</option>
                     <option value={3}>3% or less</option>
                     <option value={5}>5% or less</option>
                     <option value={10}>10% or less</option>
-                    <option value={20}>20% or less</option>
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Max Credit Score Required</label>
                   <select
                     value={maxCreditScore}
                     onChange={(e) => setMaxCreditScore(Number(e.target.value))}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg"
                   >
                     <option value={850}>Any</option>
                     <option value={580}>580 or less</option>
                     <option value={620}>620 or less</option>
                     <option value={640}>640 or less</option>
-                    <option value={680}>680 or less</option>
-                    <option value={700}>700 or less</option>
                   </select>
+                </div>
+                <div className="flex items-end">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showOnlyMyState}
+                      onChange={(e) => setShowOnlyMyState(e.target.checked)}
+                      className="w-5 h-5 text-blue-600 rounded"
+                    />
+                    <span className="font-medium text-gray-700">Only show lenders in {userState}</span>
+                  </label>
                 </div>
               </div>
 
-              {/* Row 3: Sort */}
-              <div className="flex flex-wrap gap-2 items-center">
-                <span className="text-sm text-gray-500">Sort by:</span>
+              {/* Sort buttons */}
+              <div className="flex flex-wrap gap-2 items-center pt-2 border-t">
+                <span className="text-sm text-gray-500">Sort:</span>
                 {[
                   { id: 'rate', label: 'Lowest Rate' },
                   { id: 'rating', label: 'Highest Rated' },
-                  { id: 'down_payment', label: 'Lowest Down Payment' },
-                  { id: 'credit_score', label: 'Lowest Credit Required' },
-                  { id: 'reviews', label: 'Most Reviews' },
+                  { id: 'down_payment', label: 'Lowest Down' },
+                  { id: 'credit_score', label: 'Lowest Credit' },
                 ].map(sort => (
                   <button
                     key={sort.id}
@@ -405,38 +543,28 @@ export default function ComparePage() {
                         setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                       } else {
                         setSortBy(sort.id);
-                        setSortOrder(sort.id === 'rating' || sort.id === 'reviews' ? 'desc' : 'asc');
+                        setSortOrder(sort.id === 'rating' ? 'desc' : 'asc');
                       }
                     }}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                      sortBy === sort.id
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      sortBy === sort.id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    {sort.label}
-                    {sortBy === sort.id && (
-                      <span className="ml-1">{sortOrder === 'asc' ? '↑' : '↓'}</span>
-                    )}
+                    {sort.label} {sortBy === sort.id && (sortOrder === 'asc' ? '↑' : '↓')}
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Compare Mode */}
+          {/* Compare Selection */}
           {selectedLenders.size > 0 && (
             <div className="mt-4 flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-              <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-blue-600" />
-                <span className="font-medium text-blue-900">
-                  {selectedLenders.size} selected (max 4)
-                </span>
-              </div>
+              <span className="font-medium text-blue-900">
+                {selectedLenders.size} selected (max 4)
+              </span>
               <div className="flex gap-3">
-                <button onClick={() => setSelectedLenders(new Set())} className="text-gray-600 text-sm">
-                  Clear
-                </button>
+                <button onClick={() => setSelectedLenders(new Set())} className="text-gray-600 text-sm">Clear</button>
                 <button
                   onClick={() => setCompareMode(true)}
                   className="px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg"
@@ -448,12 +576,13 @@ export default function ComparePage() {
           )}
         </div>
 
-        {/* Results count */}
+        {/* Results */}
         <p className="text-gray-600 mb-4">
-          Showing {filteredLenders.length} of {lenders.length} lenders for <strong>{selectedRateType}</strong>
+          Showing {filteredLenders.length} lenders for <strong>{selectedRateType}</strong>
+          {showOnlyMyState && <span> in <strong>{userState}</strong></span>}
         </p>
 
-        {/* Comparison Modal */}
+        {/* Compare Modal */}
         {compareMode && selectedLendersList.length > 0 && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-auto">
@@ -467,9 +596,9 @@ export default function ComparePage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b">
-                      <th className="text-left p-3 font-semibold text-gray-900">Feature</th>
+                      <th className="text-left p-3 font-semibold">Feature</th>
                       {selectedLendersList.map(l => (
-                        <th key={l.id} className="text-center p-3 font-semibold text-gray-900">{l.name}</th>
+                        <th key={l.id} className="text-center p-3 font-semibold">{l.name}</th>
                       ))}
                     </tr>
                   </thead>
@@ -489,17 +618,6 @@ export default function ComparePage() {
                       ))}
                     </tr>
                     <tr>
-                      <td className="p-3 text-gray-600">Rating</td>
-                      {selectedLendersList.map(l => (
-                        <td key={l.id} className="p-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                            {l.rating}
-                          </div>
-                        </td>
-                      ))}
-                    </tr>
-                    <tr>
                       <td className="p-3 text-gray-600">Min Down Payment</td>
                       {selectedLendersList.map(l => (
                         <td key={l.id} className="p-3 text-center font-medium">{l.min_down_payment}%</td>
@@ -512,21 +630,32 @@ export default function ComparePage() {
                       ))}
                     </tr>
                     <tr>
+                      <td className="p-3 text-gray-600">Lends in {userState}?</td>
+                      {selectedLendersList.map(l => (
+                        <td key={l.id} className="p-3 text-center">
+                          {lendsInUserState(l) ? (
+                            <CheckCircle2 className="w-6 h-6 text-green-600 mx-auto" />
+                          ) : (
+                            <XCircle className="w-6 h-6 text-red-500 mx-auto" />
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr>
+                      <td className="p-3 text-gray-600">Rating</td>
+                      {selectedLendersList.map(l => (
+                        <td key={l.id} className="p-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                            {l.rating}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                    <tr>
                       <td className="p-3 text-gray-600">Type</td>
                       {selectedLendersList.map(l => (
-                        <td key={l.id} className="p-3 text-center">{lenderTypeLabels[l.lender_type]?.label}</td>
-                      ))}
-                    </tr>
-                    <tr>
-                      <td className="p-3 text-gray-600">NMLS ID</td>
-                      {selectedLendersList.map(l => (
-                        <td key={l.id} className="p-3 text-center text-sm">#{l.nmls_id}</td>
-                      ))}
-                    </tr>
-                    <tr>
-                      <td className="p-3 text-gray-600">Reviews</td>
-                      {selectedLendersList.map(l => (
-                        <td key={l.id} className="p-3 text-center">{l.review_count?.toLocaleString()}</td>
+                        <td key={l.id} className="p-3 text-center">{lenderTypeConfig[l.lender_type]?.label}</td>
                       ))}
                     </tr>
                   </tbody>
@@ -539,21 +668,22 @@ export default function ComparePage() {
         {/* Lender Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredLenders.map((lender) => {
-            const typeInfo = lenderTypeLabels[lender.lender_type] || { 
-              label: lender.lender_type, icon: Building2, color: 'bg-gray-100 text-gray-700' 
+            const typeConfig = lenderTypeConfig[lender.lender_type] || { 
+              label: lender.lender_type, icon: Building2, color: 'text-gray-700', bgColor: 'bg-gray-100' 
             };
-            const TypeIcon = typeInfo.icon;
+            const TypeIcon = typeConfig.icon;
             const isSelected = selectedLenders.has(lender.id);
             const lenderRate = getLenderRate(lender);
             const lenderAPR = getLenderAPR(lender);
             const isBestRate = lenderRate <= bestRate + 0.01;
+            const canLendInState = lendsInUserState(lender);
 
             return (
               <div
                 key={lender.id}
                 className={`bg-white rounded-xl shadow-sm border-2 transition-all hover:shadow-lg ${
                   isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
-                }`}
+                } ${!canLendInState ? 'opacity-75' : ''}`}
               >
                 {/* Rate Header */}
                 <div className={`p-4 rounded-t-xl ${isBestRate ? 'bg-green-50' : 'bg-gray-50'}`}>
@@ -585,12 +715,26 @@ export default function ComparePage() {
                 </div>
 
                 <div className="p-4">
-                  {/* Lender Info */}
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${typeInfo.color}`}>
+                  {/* Badges Row */}
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${typeConfig.bgColor} ${typeConfig.color}`}>
                       <TypeIcon className="w-3 h-3" />
-                      {typeInfo.label}
+                      {typeConfig.label}
                     </span>
+                    
+                    {/* State Licensing Badge */}
+                    {canLendInState ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Lends in {userState}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                        <XCircle className="w-3 h-3" />
+                        No {userState}
+                      </span>
+                    )}
+                    
                     {lender.nmls_id && (
                       <span className="flex items-center gap-1 text-xs text-green-600">
                         <Shield className="w-3 h-3" />
@@ -603,7 +747,7 @@ export default function ComparePage() {
                   
                   {/* Rating */}
                   <div className="flex items-center gap-2 mb-3">
-                    <div className="flex items-center">
+                    <div className="flex">
                       {[...Array(5)].map((_, i) => (
                         <Star key={i} className={`w-4 h-4 ${i < Math.floor(lender.rating || 0) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
                       ))}
@@ -624,12 +768,14 @@ export default function ComparePage() {
                     </div>
                   </div>
 
-                  {/* Specialties */}
-                  <div className="flex flex-wrap gap-1 mb-3">
-                    {lender.specialties?.slice(0, 3).map((s, i) => (
-                      <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded-full">{s}</span>
-                    ))}
-                  </div>
+                  {/* States Served (for non-national) */}
+                  {lender.lender_type !== 'national' && lender.lender_type !== 'online' && (
+                    <div className="mb-3 text-xs text-gray-500">
+                      <span className="font-medium">States served: </span>
+                      {lender.licensed_states?.slice(0, 8).join(', ')}
+                      {lender.licensed_states && lender.licensed_states.length > 8 && ` +${lender.licensed_states.length - 8} more`}
+                    </div>
+                  )}
 
                   {/* Actions */}
                   <div className="flex gap-2">
@@ -637,17 +783,30 @@ export default function ComparePage() {
                       href={lender.website?.startsWith('http') ? lender.website : `https://${lender.website}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+                      className={`flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium rounded-lg transition ${
+                        canLendInState
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
+                      onClick={(e) => !canLendInState && e.preventDefault()}
                     >
-                      <Globe className="w-4 h-4" />
-                      Get Quote
+                      <ExternalLink className="w-4 h-4" />
+                      {canLendInState ? 'Apply Now' : `Not in ${userState}`}
                     </a>
-                    {lender.phone && (
+                    {lender.phone && canLendInState && (
                       <a href={`tel:${lender.phone}`} className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50">
                         <Phone className="w-4 h-4 text-gray-600" />
                       </a>
                     )}
                   </div>
+
+                  {/* Affiliate indicator */}
+                  {lender.has_affiliate && (
+                    <div className="mt-2 text-xs text-gray-400 flex items-center gap-1">
+                      <Info className="w-3 h-3" />
+                      Affiliate partner
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -662,10 +821,29 @@ export default function ComparePage() {
           </div>
         )}
 
-        {/* Disclaimer */}
-        <div className="mt-8 p-4 bg-gray-100 rounded-lg text-sm text-gray-600">
-          <strong>Note:</strong> Rates shown are estimates based on market averages and may vary based on your 
-          specific situation. Contact lenders directly for personalized quotes. All lenders are NMLS verified.
+        {/* Disclosures */}
+        <div className="mt-8 space-y-4">
+          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <div>
+                <strong>State Licensing:</strong> Mortgage lenders must be licensed in each state where they operate. 
+                National and online lenders typically serve all 50 states. Regional and credit union lenders may have 
+                limited geographic coverage. Always verify the lender is licensed to operate in your state before applying.
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+            <div className="flex items-start gap-2">
+              <Info className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <div>
+                <strong>Affiliate Disclosure:</strong> CR AudioViz AI may receive compensation from some lenders 
+                when you apply through our links. This does not affect our editorial integrity or the rates you receive. 
+                All lenders are selected based on objective criteria including rates, service, and customer reviews.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
