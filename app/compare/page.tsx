@@ -1,6 +1,6 @@
 // CR AudioViz AI - Mortgage Rate Monitor
-// Compare Lenders Page - Enhanced with state licensing, clickable stats, affiliates
-// Created: December 14, 2025
+// Compare Lenders Page - User state-centric (not Florida default)
+// December 14, 2025
 
 'use client';
 
@@ -9,7 +9,7 @@ import {
   Search, Star, Phone, Globe, MapPin, Check, X,
   Building2, Users, Landmark, Wifi, Shield, TrendingDown,
   SlidersHorizontal, AlertCircle, ExternalLink, BadgeCheck,
-  CheckCircle2, XCircle, Info
+  CheckCircle2, XCircle, Info, ChevronDown
 } from 'lucide-react';
 
 interface LenderRate {
@@ -93,7 +93,10 @@ export default function ComparePage() {
   const [marketRates, setMarketRates] = useState<MarketRates>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [userState, setUserState] = useState<string>('FL'); // Default Florida
+  
+  // User's state - NO DEFAULT, must be selected
+  const [userState, setUserState] = useState<string | null>(null);
+  const [showStateSelector, setShowStateSelector] = useState(false);
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -101,7 +104,7 @@ export default function ComparePage() {
   const [selectedRateType, setSelectedRateType] = useState<string>('30-Year Fixed');
   const [maxDownPayment, setMaxDownPayment] = useState<number>(100);
   const [maxCreditScore, setMaxCreditScore] = useState<number>(850);
-  const [showOnlyMyState, setShowOnlyMyState] = useState(false);
+  const [showOnlyMyState, setShowOnlyMyState] = useState(true); // Default ON
   
   // Sort
   const [sortBy, setSortBy] = useState<string>('rate');
@@ -111,6 +114,24 @@ export default function ComparePage() {
   const [showFilters, setShowFilters] = useState(true);
   const [selectedLenders, setSelectedLenders] = useState<Set<string>>(new Set());
   const [compareMode, setCompareMode] = useState(false);
+
+  // Load saved state preference on mount
+  useEffect(() => {
+    const savedState = localStorage.getItem('mortgage_user_state');
+    if (savedState && US_STATES.find(s => s.code === savedState)) {
+      setUserState(savedState);
+    } else {
+      // No saved state - show selector
+      setShowStateSelector(true);
+    }
+  }, []);
+
+  // Save state preference when changed
+  useEffect(() => {
+    if (userState) {
+      localStorage.setItem('mortgage_user_state', userState);
+    }
+  }, [userState]);
 
   useEffect(() => {
     fetchData();
@@ -259,6 +280,7 @@ export default function ComparePage() {
   };
 
   const lendsInUserState = (lender: Lender): boolean => {
+    if (!userState) return true; // Show all if no state selected
     return lender.licensed_states?.includes(userState) || false;
   };
 
@@ -270,7 +292,7 @@ export default function ComparePage() {
       const matchesType = selectedType === 'all' || lender.lender_type === selectedType;
       const matchesDownPayment = lender.min_down_payment <= maxDownPayment;
       const matchesCreditScore = lender.min_credit_score <= maxCreditScore;
-      const matchesState = !showOnlyMyState || lendsInUserState(lender);
+      const matchesState = !showOnlyMyState || !userState || lendsInUserState(lender);
       
       return matchesSearch && matchesType && matchesDownPayment && matchesCreditScore && matchesState;
     })
@@ -303,7 +325,7 @@ export default function ComparePage() {
     regional: lenders.filter(l => l.lender_type === 'regional').length,
     creditUnion: lenders.filter(l => l.lender_type === 'credit_union').length,
     online: lenders.filter(l => l.lender_type === 'online').length,
-    inMyState: lenders.filter(l => lendsInUserState(l)).length,
+    inMyState: userState ? lenders.filter(l => lendsInUserState(l)).length : lenders.length,
   };
 
   const bestRate = filteredLenders.length > 0 
@@ -335,12 +357,71 @@ export default function ComparePage() {
     }
   };
 
+  const handleStateSelect = (stateCode: string) => {
+    setUserState(stateCode);
+    setShowStateSelector(false);
+  };
+
+  const getStateName = (code: string) => {
+    return US_STATES.find(s => s.code === code)?.name || code;
+  };
+
+  // STATE SELECTOR MODAL - Shows first if no state selected
+  if (showStateSelector || !userState) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <MapPin className="w-8 h-8 text-blue-600" />
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Where are you buying?</h1>
+            <p className="text-gray-600">
+              Select your state to see lenders licensed to serve you
+            </p>
+          </div>
+
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select your state
+            </label>
+            <select
+              value={userState || ''}
+              onChange={(e) => setUserState(e.target.value)}
+              className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">-- Choose your state --</option>
+              {US_STATES.map(state => (
+                <option key={state.code} value={state.code}>
+                  {state.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={() => userState && setShowStateSelector(false)}
+            disabled={!userState}
+            className="w-full py-4 bg-blue-600 text-white text-lg font-semibold rounded-xl hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Find Lenders in {userState ? getStateName(userState) : 'Your State'}
+          </button>
+
+          <p className="text-center text-sm text-gray-500 mt-4">
+            Mortgage lenders must be licensed in your state to serve you. 
+            We'll show you only lenders who can help.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading lenders and rates...</p>
+          <p className="mt-4 text-gray-600">Loading lenders for {getStateName(userState)}...</p>
         </div>
       </div>
     );
@@ -353,29 +434,38 @@ export default function ComparePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
             <div>
-              <h1 className="text-3xl font-bold mb-2">Compare Mortgage Lenders</h1>
+              <h1 className="text-3xl font-bold mb-2">
+                Mortgage Lenders in {getStateName(userState)}
+              </h1>
               <p className="text-lg text-blue-100">
-                Compare {stats.total}+ verified lenders with real-time rates
+                {stats.inMyState} lenders licensed to serve you
               </p>
             </div>
             <div className="mt-4 md:mt-0">
-              <label className="text-sm text-blue-200 block mb-1">Your State</label>
-              <select
-                value={userState}
-                onChange={(e) => setUserState(e.target.value)}
-                className="px-4 py-2 bg-white/20 backdrop-blur rounded-lg text-white border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50"
+              <button
+                onClick={() => setShowStateSelector(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-white/20 backdrop-blur rounded-lg text-white border border-white/30 hover:bg-white/30 transition"
               >
-                {US_STATES.map(state => (
-                  <option key={state.code} value={state.code} className="text-gray-900">
-                    {state.name}
-                  </option>
-                ))}
-              </select>
+                <MapPin className="w-4 h-4" />
+                {getStateName(userState)}
+                <ChevronDown className="w-4 h-4" />
+              </button>
             </div>
           </div>
           
           {/* Clickable Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+            <button
+              onClick={() => handleStatCardClick('myState')}
+              className={`p-3 rounded-lg text-center transition ${
+                showOnlyMyState && selectedType === 'all'
+                  ? 'bg-white text-blue-700 shadow-lg'
+                  : 'bg-white/10 backdrop-blur hover:bg-white/20'
+              }`}
+            >
+              <div className="text-2xl font-bold">{stats.inMyState}</div>
+              <div className="text-xs opacity-80">In {userState}</div>
+            </button>
             <button
               onClick={() => handleStatCardClick('total')}
               className={`p-3 rounded-lg text-center transition ${
@@ -430,17 +520,6 @@ export default function ComparePage() {
             >
               <div className="text-2xl font-bold">{stats.online}</div>
               <div className="text-xs opacity-80">Online</div>
-            </button>
-            <button
-              onClick={() => handleStatCardClick('myState')}
-              className={`p-3 rounded-lg text-center transition ${
-                showOnlyMyState
-                  ? 'bg-white text-emerald-700 shadow-lg'
-                  : 'bg-white/10 backdrop-blur hover:bg-white/20'
-              }`}
-            >
-              <div className="text-2xl font-bold">{stats.inMyState}</div>
-              <div className="text-xs opacity-80">Lend in {userState}</div>
             </button>
           </div>
         </div>
@@ -522,7 +601,7 @@ export default function ComparePage() {
                       onChange={(e) => setShowOnlyMyState(e.target.checked)}
                       className="w-5 h-5 text-blue-600 rounded"
                     />
-                    <span className="font-medium text-gray-700">Only show lenders in {userState}</span>
+                    <span className="font-medium text-gray-700">Only lenders in {userState}</span>
                   </label>
                 </div>
               </div>
@@ -579,7 +658,7 @@ export default function ComparePage() {
         {/* Results */}
         <p className="text-gray-600 mb-4">
           Showing {filteredLenders.length} lenders for <strong>{selectedRateType}</strong>
-          {showOnlyMyState && <span> in <strong>{userState}</strong></span>}
+          {showOnlyMyState && userState && <span> in <strong>{getStateName(userState)}</strong></span>}
         </p>
 
         {/* Compare Modal */}
@@ -630,7 +709,7 @@ export default function ComparePage() {
                       ))}
                     </tr>
                     <tr>
-                      <td className="p-3 text-gray-600">Lends in {userState}?</td>
+                      <td className="p-3 text-gray-600">Serves {getStateName(userState)}?</td>
                       {selectedLendersList.map(l => (
                         <td key={l.id} className="p-3 text-center">
                           {lendsInUserState(l) ? (
@@ -683,10 +762,10 @@ export default function ComparePage() {
                 key={lender.id}
                 className={`bg-white rounded-xl shadow-sm border-2 transition-all hover:shadow-lg ${
                   isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
-                } ${!canLendInState ? 'opacity-75' : ''}`}
+                } ${!canLendInState ? 'opacity-60' : ''}`}
               >
                 {/* Rate Header */}
-                <div className={`p-4 rounded-t-xl ${isBestRate ? 'bg-green-50' : 'bg-gray-50'}`}>
+                <div className={`p-4 rounded-t-xl ${isBestRate && canLendInState ? 'bg-green-50' : 'bg-gray-50'}`}>
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="text-xs text-gray-500 mb-1">{selectedRateType}</div>
@@ -694,7 +773,7 @@ export default function ComparePage() {
                       <div className="text-sm text-gray-600">APR: {lenderAPR.toFixed(3)}%</div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
-                      {isBestRate && (
+                      {isBestRate && canLendInState && (
                         <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full flex items-center gap-1">
                           <TrendingDown className="w-3 h-3" />
                           Best Rate
@@ -726,12 +805,12 @@ export default function ComparePage() {
                     {canLendInState ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">
                         <CheckCircle2 className="w-3 h-3" />
-                        Lends in {userState}
+                        Serves {userState}
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700">
                         <XCircle className="w-3 h-3" />
-                        No {userState}
+                        Not in {userState}
                       </span>
                     )}
                     
@@ -817,7 +896,7 @@ export default function ComparePage() {
           <div className="text-center py-12 bg-white rounded-xl">
             <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-gray-600">No lenders found</h3>
-            <p className="text-gray-500">Try adjusting your filters</p>
+            <p className="text-gray-500">Try adjusting your filters or <button onClick={() => setShowOnlyMyState(false)} className="text-blue-600 underline">show all lenders</button></p>
           </div>
         )}
 
@@ -828,8 +907,11 @@ export default function ComparePage() {
               <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
               <div>
                 <strong>State Licensing:</strong> Mortgage lenders must be licensed in each state where they operate. 
-                National and online lenders typically serve all 50 states. Regional and credit union lenders may have 
-                limited geographic coverage. Always verify the lender is licensed to operate in your state before applying.
+                We show lenders licensed to serve <strong>{getStateName(userState)}</strong>. 
+                Always verify licensing before applying.
+                <button onClick={() => setShowStateSelector(true)} className="ml-2 text-blue-600 underline">
+                  Change your state
+                </button>
               </div>
             </div>
           </div>
