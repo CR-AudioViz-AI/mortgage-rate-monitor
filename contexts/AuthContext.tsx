@@ -1,12 +1,19 @@
 // CR AudioViz AI - Mortgage Rate Monitor
-// Authentication Context - Manages user state across app
-// December 14, 2025
+// Authentication Context - Simplified version (no auth-helpers-nextjs)
+// December 15, 2025
 
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { User, Session } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
+
+// Create Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+const supabase = supabaseUrl && supabaseAnonKey 
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
 interface UserProfile {
   id: string;
@@ -21,10 +28,11 @@ interface UserProfile {
 }
 
 interface AuthContextType {
-  user: User | null;
+  user: any | null;
   profile: UserProfile | null;
-  session: Session | null;
+  session: any | null;
   loading: boolean;
+  isConfigured: boolean;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
@@ -36,15 +44,17 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   
-  const supabase = createClientComponentClient();
+  const isConfigured = !!supabase;
 
   // Fetch user profile from database
   async function fetchProfile(userId: string) {
+    if (!supabase) return;
+    
     try {
       const { data, error } = await supabase
         .from('user_profiles')
@@ -54,11 +64,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error && error.code === 'PGRST116') {
         // Profile doesn't exist, create one
+        const { data: userData } = await supabase.auth.getUser();
         const { data: newProfile, error: createError } = await supabase
           .from('user_profiles')
           .insert({
             id: userId,
-            email: user?.email || '',
+            email: userData?.user?.email || '',
             subscription_tier: 'free',
           })
           .select()
@@ -77,6 +88,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize auth state
   useEffect(() => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
     const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -116,6 +132,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Sign up with email/password
   async function signUp(email: string, password: string, fullName?: string) {
+    if (!supabase) return { error: 'Auth not configured' };
+    
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -145,6 +163,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Sign in with email/password
   async function signIn(email: string, password: string) {
+    if (!supabase) return { error: 'Auth not configured' };
+    
     try {
       const { error } = await supabase.auth.signInWithPassword({
         email,
@@ -158,11 +178,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Sign in with Google
   async function signInWithGoogle() {
+    if (!supabase) return { error: 'Auth not configured' };
+    
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`,
         },
       });
       return { error };
@@ -173,6 +195,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Sign out
   async function signOut() {
+    if (!supabase) return;
+    
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
@@ -181,7 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Update profile
   async function updateProfile(updates: Partial<UserProfile>) {
-    if (!user) return { error: 'Not authenticated' };
+    if (!supabase || !user) return { error: 'Not authenticated' };
 
     try {
       const { error } = await supabase
@@ -213,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         session,
         loading,
+        isConfigured,
         signUp,
         signIn,
         signInWithGoogle,
