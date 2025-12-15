@@ -1,341 +1,380 @@
+// CR AudioViz AI - Mortgage Rate Monitor
+// Pricing Page - Free, Pro, Agent tiers
+// December 14, 2025
+
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
+import { 
+  Check, X, Zap, Crown, Building2, Star,
+  Bell, BarChart3, Download, Users, Code,
+  Shield, Clock, Calculator, TrendingUp
+} from 'lucide-react';
 
-interface Plan {
-  id: string;
-  name: string;
-  price: number;
-  credits: number;
-  features: string[];
-  popular?: boolean;
-}
-
-const plans: Plan[] = [
+const plans = [
   {
     id: 'free',
     name: 'Free',
+    description: 'Perfect for homebuyers researching rates',
     price: 0,
-    credits: 0,
+    priceMonthly: 0,
+    icon: Star,
+    color: 'gray',
     features: [
-      'View rates from all 500+ lenders',
-      'Basic mortgage calculators',
-      'Compare up to 3 lenders',
-      '1 rate alert',
-      'Email support'
-    ]
+      { text: 'View all current rates', included: true },
+      { text: 'Compare up to 5 lenders/day', included: true },
+      { text: '1 rate alert', included: true },
+      { text: '30-day historical data', included: true },
+      { text: 'All calculators', included: true },
+      { text: 'Unlimited lender views', included: false },
+      { text: 'Export to CSV', included: false },
+      { text: '5+ year historical data', included: false },
+      { text: 'Saved lender lists', included: false },
+      { text: 'Embeddable widget', included: false },
+    ],
+    cta: 'Get Started Free',
+    popular: false,
   },
   {
     id: 'pro',
     name: 'Pro',
-    price: 29,
-    credits: 100,
+    description: 'For serious homebuyers & homeowners',
+    price: 9.99,
+    priceMonthly: 9.99,
+    priceYearly: 99,
+    icon: Zap,
+    color: 'blue',
+    features: [
+      { text: 'View all current rates', included: true },
+      { text: 'Unlimited lender comparisons', included: true },
+      { text: '5 rate alerts', included: true },
+      { text: '5-year historical data', included: true },
+      { text: 'All calculators', included: true },
+      { text: 'Unlimited lender views', included: true },
+      { text: 'Export to CSV', included: true },
+      { text: '3 saved lender lists', included: true },
+      { text: 'Email support', included: true },
+      { text: 'Embeddable widget', included: false },
+    ],
+    cta: 'Start Pro Trial',
     popular: true,
-    features: [
-      'Everything in Free',
-      '100 CR AudioViz credits/month',
-      'Unlimited lender comparisons',
-      'Advanced calculators',
-      'Unlimited rate alerts',
-      'Document upload & storage',
-      'Credit score tracking',
-      'Priority email support',
-      'Use credits across ALL CR AudioViz products'
-    ]
   },
   {
-    id: 'premium',
-    name: 'Premium',
-    price: 99,
-    credits: 500,
+    id: 'agent',
+    name: 'Agent & Broker',
+    description: 'For real estate professionals',
+    price: 29.99,
+    priceMonthly: 29.99,
+    priceYearly: 299,
+    icon: Building2,
+    color: 'purple',
     features: [
-      'Everything in Pro',
-      '500 CR AudioViz credits/month',
-      'Dedicated mortgage specialist',
-      'Custom rate analysis',
-      'Pre-approval assistance',
-      'Realtor matching service',
-      'API access (basic)',
-      'Phone support',
-      'Use credits across ALL CR AudioViz products'
-    ]
+      { text: 'Everything in Pro', included: true },
+      { text: '25 rate alerts', included: true },
+      { text: 'All historical data (1971+)', included: true },
+      { text: 'Unlimited saved lender lists', included: true },
+      { text: 'Embeddable rate widget', included: true, highlight: true },
+      { text: 'Branded share links', included: true, highlight: true },
+      { text: 'Client rate notifications', included: true, highlight: true },
+      { text: 'Market report PDFs', included: true },
+      { text: 'Priority email support', included: true },
+      { text: 'API access (coming soon)', included: true },
+    ],
+    cta: 'Start Agent Trial',
+    popular: false,
   },
-  {
-    id: 'enterprise',
-    name: 'Enterprise',
-    price: 299,
-    credits: 2000,
-    features: [
-      'Everything in Premium',
-      '2000 CR AudioViz credits/month',
-      'Full API access',
-      'White-label option',
-      'Lead management CRM',
-      'Custom integrations',
-      'Dedicated account manager',
-      '24/7 priority support',
-      'Use credits across ALL CR AudioViz products',
-      'Perfect for realtors & brokers'
-    ]
-  }
 ];
 
-// Other CR AudioViz products credits can be used on
-const crossPlatformProducts = [
-  { name: 'AI Video Generation', cost: '10-50 credits' },
-  { name: 'AI Image Creation', cost: '5-25 credits' },
-  { name: 'Document Builder', cost: '20 credits' },
-  { name: 'Newsletter System', cost: '15 credits' },
-  { name: 'Marketing Dashboard', cost: '30 credits' },
-  { name: 'Legal AI Assistant', cost: '25 credits' },
-  { name: 'Market Oracle (Stock Picks)', cost: '40 credits' },
-  { name: 'CRAIverse Access', cost: '50 credits' }
+const faqs = [
+  {
+    q: 'Can I cancel anytime?',
+    a: 'Yes! You can cancel your subscription at any time. Your access continues until the end of your billing period.',
+  },
+  {
+    q: 'Is there a free trial?',
+    a: 'Yes, Pro and Agent plans include a 7-day free trial. No credit card required to start.',
+  },
+  {
+    q: 'What payment methods do you accept?',
+    a: 'We accept all major credit cards (Visa, Mastercard, Amex, Discover) through our secure Stripe payment processor.',
+  },
+  {
+    q: 'Can I upgrade or downgrade?',
+    a: 'Absolutely. You can change your plan at any time. Upgrades take effect immediately; downgrades apply at your next billing cycle.',
+  },
+  {
+    q: 'What is the embeddable widget?',
+    a: 'A code snippet you can add to your website that displays live mortgage rates. Perfect for real estate agents and mortgage brokers.',
+  },
+  {
+    q: 'Where does the rate data come from?',
+    a: 'Our rates come from Freddie Mac via the Federal Reserve (FRED). These are the official Primary Mortgage Market Survey rates, the gold standard for mortgage rate data.',
+  },
 ];
 
 export default function PricingPage() {
-  const router = useRouter();
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const { user, profile } = useAuth();
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
-  const handleSelectPlan = async (plan: Plan) => {
-    if (plan.id === 'free') {
-      // Free plan - just redirect to signup
-      router.push('/signup');
-      return;
-    }
+  const getPrice = (plan: typeof plans[0]) => {
+    if (plan.price === 0) return 0;
+    return billingCycle === 'yearly' ? (plan.priceYearly || plan.price * 10) : plan.priceMonthly;
+  };
 
-    // Redirect to CR AudioViz checkout with plan
-    const checkoutUrl = `https://craudiovizai.com/checkout?plan=mortgage_${plan.id}&amount=${plan.price}&credits=${plan.credits}`;
-    window.location.href = checkoutUrl;
+  const getPriceDisplay = (plan: typeof plans[0]) => {
+    const price = getPrice(plan);
+    if (price === 0) return 'Free';
+    return `$${price}${billingCycle === 'yearly' ? '/year' : '/mo'}`;
+  };
+
+  const getSavings = (plan: typeof plans[0]) => {
+    if (!plan.priceYearly) return 0;
+    const monthlyCost = plan.priceMonthly * 12;
+    return monthlyCost - plan.priceYearly;
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       {/* Header */}
-      <div className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <h1 className="text-4xl font-bold text-gray-900">Choose Your Plan</h1>
-          <p className="text-xl text-gray-600 mt-2">
-            Find the best mortgage rates and use credits across all CR AudioViz products
+      <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white py-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h1 className="text-4xl font-bold mb-4">Simple, Transparent Pricing</h1>
+          <p className="text-xl text-blue-100 max-w-2xl mx-auto">
+            Start free and upgrade when you need more. No hidden fees, cancel anytime.
           </p>
+
+          {/* Billing Toggle */}
+          <div className="mt-8 inline-flex items-center bg-white/10 backdrop-blur rounded-full p-1">
+            <button
+              onClick={() => setBillingCycle('monthly')}
+              className={`px-6 py-2 rounded-full text-sm font-medium transition ${
+                billingCycle === 'monthly' ? 'bg-white text-blue-600' : 'text-white'
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setBillingCycle('yearly')}
+              className={`px-6 py-2 rounded-full text-sm font-medium transition ${
+                billingCycle === 'yearly' ? 'bg-white text-blue-600' : 'text-white'
+              }`}
+            >
+              Yearly <span className="text-green-300 ml-1">Save 17%</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Billing Toggle */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-center gap-4 mb-12">
-          <button
-            onClick={() => setBillingCycle('monthly')}
-            className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-              billingCycle === 'monthly'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            Monthly
-          </button>
-          <button
-            onClick={() => setBillingCycle('annual')}
-            className={`px-6 py-2 rounded-lg font-medium transition-colors relative ${
-              billingCycle === 'annual'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            Annual
-            <span className="absolute -top-2 -right-2 px-2 py-1 bg-green-500 text-white text-xs rounded-full">
-              Save 20%
-            </span>
-          </button>
-        </div>
+      {/* Pricing Cards */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8">
+        <div className="grid md:grid-cols-3 gap-6">
+          {plans.map((plan) => {
+            const Icon = plan.icon;
+            const isCurrentPlan = profile?.subscription_tier === plan.id;
+            const savings = getSavings(plan);
 
-        {/* Plans Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
-          {plans.map((plan) => (
-            <div
-              key={plan.id}
-              className={`bg-white rounded-2xl shadow-lg p-8 relative ${
-                plan.popular ? 'ring-2 ring-blue-500 transform scale-105' : ''
-              }`}
-            >
-              {plan.popular && (
-                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <span className="px-4 py-1 bg-blue-500 text-white text-sm font-bold rounded-full">
-                    MOST POPULAR
-                  </span>
-                </div>
-              )}
-
-              <div className="text-center mb-6">
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">{plan.name}</h3>
-                <div className="mb-4">
-                  <span className="text-5xl font-bold text-gray-900">
-                    ${billingCycle === 'annual' ? Math.floor(plan.price * 0.8 * 12) : plan.price}
-                  </span>
-                  <span className="text-gray-600">
-                    /{billingCycle === 'annual' ? 'year' : 'month'}
-                  </span>
-                </div>
-                {plan.credits > 0 && (
-                  <div className="px-4 py-2 bg-purple-100 text-purple-800 rounded-lg font-medium">
-                    {billingCycle === 'annual' ? plan.credits * 12 : plan.credits} Credits
-                  </div>
-                )}
-              </div>
-
-              <ul className="space-y-3 mb-8">
-                {plan.features.map((feature, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <span className="text-green-500 mt-1">✓</span>
-                    <span className="text-gray-700 text-sm">{feature}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <button
-                onClick={() => handleSelectPlan(plan)}
-                className={`w-full py-3 rounded-lg font-bold transition-colors ${
-                  plan.popular
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+            return (
+              <div
+                key={plan.id}
+                className={`relative bg-white rounded-2xl shadow-xl overflow-hidden ${
+                  plan.popular ? 'ring-2 ring-blue-600' : ''
                 }`}
               >
-                {plan.id === 'free' ? 'Get Started Free' : 'Subscribe Now'}
-              </button>
+                {plan.popular && (
+                  <div className="absolute top-0 left-0 right-0 bg-blue-600 text-white text-center text-sm font-medium py-1">
+                    Most Popular
+                  </div>
+                )}
+
+                <div className={`p-6 ${plan.popular ? 'pt-10' : ''}`}>
+                  {/* Plan Header */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                      plan.color === 'gray' ? 'bg-gray-100' :
+                      plan.color === 'blue' ? 'bg-blue-100' : 'bg-purple-100'
+                    }`}>
+                      <Icon className={`w-6 h-6 ${
+                        plan.color === 'gray' ? 'text-gray-600' :
+                        plan.color === 'blue' ? 'text-blue-600' : 'text-purple-600'
+                      }`} />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">{plan.name}</h3>
+                      <p className="text-sm text-gray-500">{plan.description}</p>
+                    </div>
+                  </div>
+
+                  {/* Price */}
+                  <div className="mb-6">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-4xl font-bold text-gray-900">
+                        {plan.price === 0 ? 'Free' : `$${getPrice(plan)}`}
+                      </span>
+                      {plan.price > 0 && (
+                        <span className="text-gray-500">
+                          /{billingCycle === 'yearly' ? 'year' : 'mo'}
+                        </span>
+                      )}
+                    </div>
+                    {billingCycle === 'yearly' && savings > 0 && (
+                      <p className="text-sm text-green-600 mt-1">
+                        Save ${savings}/year
+                      </p>
+                    )}
+                  </div>
+
+                  {/* CTA Button */}
+                  {isCurrentPlan ? (
+                    <div className="w-full py-3 bg-gray-100 text-gray-600 font-medium rounded-xl text-center">
+                      Current Plan
+                    </div>
+                  ) : (
+                    <Link
+                      href={user ? `/checkout?plan=${plan.id}&cycle=${billingCycle}` : `/login?redirect=/pricing`}
+                      className={`block w-full py-3 font-semibold rounded-xl text-center transition ${
+                        plan.popular
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : plan.id === 'agent'
+                          ? 'bg-purple-600 text-white hover:bg-purple-700'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {plan.cta}
+                    </Link>
+                  )}
+
+                  {/* Features */}
+                  <ul className="mt-6 space-y-3">
+                    {plan.features.map((feature, idx) => (
+                      <li key={idx} className="flex items-start gap-3">
+                        {feature.included ? (
+                          <Check className={`w-5 h-5 flex-shrink-0 ${
+                            feature.highlight ? 'text-purple-600' : 'text-green-600'
+                          }`} />
+                        ) : (
+                          <X className="w-5 h-5 flex-shrink-0 text-gray-300" />
+                        )}
+                        <span className={feature.included ? 'text-gray-700' : 'text-gray-400'}>
+                          {feature.text}
+                          {feature.highlight && (
+                            <span className="ml-1 text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">
+                              Agent Exclusive
+                            </span>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Feature Highlights */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <h2 className="text-2xl font-bold text-gray-900 text-center mb-12">
+          What's Included in Every Plan
+        </h2>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[
+            { icon: TrendingUp, title: 'Live Rates', desc: 'Updated weekly from Freddie Mac' },
+            { icon: Shield, title: 'Official Data', desc: 'Federal Reserve (FRED) source' },
+            { icon: Calculator, title: 'All Calculators', desc: 'Affordability, payment, refinance' },
+            { icon: Users, title: '390+ Lenders', desc: 'Compare nationwide lenders' },
+          ].map((item, idx) => {
+            const Icon = item.icon;
+            return (
+              <div key={idx} className="bg-white rounded-xl p-6 text-center shadow-sm">
+                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                  <Icon className="w-6 h-6 text-blue-600" />
+                </div>
+                <h3 className="font-semibold text-gray-900 mb-1">{item.title}</h3>
+                <p className="text-sm text-gray-500">{item.desc}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Agent Features */}
+      <div className="bg-gradient-to-br from-purple-600 to-indigo-700 text-white py-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold mb-4">Built for Real Estate Professionals</h2>
+            <p className="text-purple-100 max-w-2xl mx-auto">
+              The Agent plan gives you tools to impress clients and close more deals
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              {
+                title: 'Embeddable Widget',
+                desc: 'Add live mortgage rates to your website with a simple code snippet. Keeps visitors on your site longer.',
+                icon: Code,
+              },
+              {
+                title: 'Branded Share Links',
+                desc: 'Send clients a rates.craudiovizai.com/your-name link that showcases your professionalism.',
+                icon: Users,
+              },
+              {
+                title: 'Market Reports',
+                desc: 'Generate beautiful PDF reports showing rate trends for your local market. Perfect for listings.',
+                icon: BarChart3,
+              },
+            ].map((feature, idx) => {
+              const Icon = feature.icon;
+              return (
+                <div key={idx} className="bg-white/10 backdrop-blur rounded-xl p-6">
+                  <Icon className="w-10 h-10 mb-4 text-purple-200" />
+                  <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
+                  <p className="text-purple-100">{feature.desc}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* FAQs */}
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <h2 className="text-2xl font-bold text-gray-900 text-center mb-12">
+          Frequently Asked Questions
+        </h2>
+        <div className="space-y-4">
+          {faqs.map((faq, idx) => (
+            <div key={idx} className="bg-white rounded-xl p-6 shadow-sm">
+              <h3 className="font-semibold text-gray-900 mb-2">{faq.q}</h3>
+              <p className="text-gray-600">{faq.a}</p>
             </div>
           ))}
         </div>
+      </div>
 
-        {/* Credit System Explanation */}
-        <div className="bg-white rounded-2xl shadow-lg p-8 mb-16">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">
-              🎯 Use Credits Across All CR AudioViz Products
-            </h2>
-            <p className="text-xl text-gray-600">
-              One subscription, unlimited possibilities
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {crossPlatformProducts.map((product, idx) => (
-              <div
-                key={idx}
-                className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 transition-colors"
-              >
-                <div className="font-semibold text-gray-900 mb-1">{product.name}</div>
-                <div className="text-sm text-gray-600">{product.cost}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-8 p-6 bg-blue-50 rounded-lg">
-            <h3 className="font-bold text-gray-900 mb-3">How Credits Work:</h3>
-            <ul className="space-y-2 text-gray-700">
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600">•</span>
-                <span>Credits never expire on paid plans</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600">•</span>
-                <span>Use them on any CR AudioViz product or service</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600">•</span>
-                <span>Unused credits roll over month-to-month</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-600">•</span>
-                <span>Buy additional credits anytime at $0.25/credit</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        {/* FAQ */}
-        <div className="bg-white rounded-2xl shadow-lg p-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-8 text-center">
-            Frequently Asked Questions
-          </h2>
-
-          <div className="grid md:grid-cols-2 gap-8">
-            <div>
-              <h3 className="font-bold text-gray-900 mb-2">
-                Can I change plans anytime?
-              </h3>
-              <p className="text-gray-600">
-                Yes! Upgrade or downgrade anytime. Changes take effect at the next billing cycle.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-bold text-gray-900 mb-2">
-                What happens to unused credits?
-              </h3>
-              <p className="text-gray-600">
-                Credits never expire on paid plans and roll over month-to-month. On free plans, credits expire monthly.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-bold text-gray-900 mb-2">
-                Can I use credits on other CR AudioViz products?
-              </h3>
-              <p className="text-gray-600">
-                Absolutely! Credits work across all 60+ CR AudioViz tools including AI video, image generation, document creation, and more.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-bold text-gray-900 mb-2">
-                Is there a money-back guarantee?
-              </h3>
-              <p className="text-gray-600">
-                Yes! We offer a 30-day money-back guarantee on all paid plans. No questions asked.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-bold text-gray-900 mb-2">
-                What payment methods do you accept?
-              </h3>
-              <p className="text-gray-600">
-                We accept all major credit cards, PayPal, and ACH bank transfers for enterprise plans.
-              </p>
-            </div>
-
-            <div>
-              <h3 className="font-bold text-gray-900 mb-2">
-                Do you offer discounts for nonprofits?
-              </h3>
-              <p className="text-gray-600">
-                Yes! We offer 50% off for registered nonprofits, veterans, and first responders. Contact us for details.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* CTA */}
-        <div className="mt-16 text-center">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">
-            Ready to find your perfect mortgage rate?
-          </h2>
-          <p className="text-xl text-gray-600 mb-8">
-            Join thousands of homebuyers saving money with CR AudioViz AI
+      {/* Final CTA */}
+      <div className="bg-gray-900 text-white py-16">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <h2 className="text-3xl font-bold mb-4">Ready to Make Smarter Mortgage Decisions?</h2>
+          <p className="text-gray-300 mb-8 max-w-2xl mx-auto">
+            Join thousands of homebuyers and professionals who trust Mortgage Rate Monitor for accurate, up-to-date rate information.
           </p>
-          <div className="flex justify-center gap-4">
-            <button
-              onClick={() => router.push('/compare')}
-              className="px-8 py-4 bg-blue-600 text-white rounded-lg font-bold text-lg hover:bg-blue-700 transition-colors"
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link
+              href={user ? '/dashboard' : '/login'}
+              className="px-8 py-3 bg-white text-gray-900 font-semibold rounded-xl hover:bg-gray-100 transition"
             >
-              Compare Rates Now
-            </button>
-            <button
-              onClick={() => router.push('/signup')}
-              className="px-8 py-4 bg-white text-gray-900 border-2 border-gray-300 rounded-lg font-bold text-lg hover:border-gray-400 transition-colors"
+              Get Started Free
+            </Link>
+            <Link
+              href="/compare"
+              className="px-8 py-3 border-2 border-white text-white font-semibold rounded-xl hover:bg-white/10 transition"
             >
-              Start Free Trial
-            </button>
+              Compare Lenders
+            </Link>
           </div>
         </div>
       </div>
