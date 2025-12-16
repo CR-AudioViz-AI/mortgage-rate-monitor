@@ -1,6 +1,6 @@
 // CR AudioViz AI - Mortgage Rate Monitor
-// Shared Header Component - Fixed navigation (Home = Current Rates)
-// Updated: December 14, 2025
+// Header Component - With Centralized Auth User Menu
+// December 16, 2025
 
 'use client';
 
@@ -11,8 +11,8 @@ import {
   TrendingUp, Calculator, Bell, Users, 
   BarChart3, Menu, X, DollarSign, FileText, Home
 } from 'lucide-react';
+import UserMenu from './UserMenu';
 
-// Combined Home and Current Rates - they're the same page now
 const navigation = [
   { name: 'Current Rates', href: '/', icon: TrendingUp, alsoMatches: ['/rates'] },
   { name: 'Compare Lenders', href: '/compare', icon: Users },
@@ -69,18 +69,14 @@ export default function Header() {
             })}
           </div>
 
-          {/* Dashboard Button */}
+          {/* User Menu (from central auth) */}
           <div className="hidden lg:flex items-center gap-3">
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/25"
-            >
-              Dashboard
-            </Link>
+            <UserMenu />
           </div>
 
           {/* Mobile menu button */}
-          <div className="lg:hidden">
+          <div className="flex items-center gap-3 lg:hidden">
+            <UserMenu />
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -121,13 +117,6 @@ export default function Header() {
                   </Link>
                 );
               })}
-              <Link
-                href="/dashboard"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-3 px-4 py-3 text-sm font-medium bg-blue-600 text-white rounded-lg mt-4"
-              >
-                Dashboard
-              </Link>
             </div>
           </div>
         )}
