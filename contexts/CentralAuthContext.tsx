@@ -323,6 +323,10 @@ export function useRequireAuth(redirectTo?: string) {
 }
 
 // Helper hook for premium features
+// Alias for backward compatibility
+export const useAuth = useCentralAuth;
+export const AuthProvider = CentralAuthProvider;
+
 export function useRequirePremium() {
   const { isPremium, isAuthenticated, loading, loginWithRedirect } = useCentralAuth();
 
@@ -339,3 +343,4 @@ export function useRequirePremium() {
     },
   };
 }
+
