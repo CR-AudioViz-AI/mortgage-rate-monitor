@@ -1,19 +1,19 @@
 // CR AudioViz AI - Mortgage Rate Monitor
-// User Dashboard - Handles unconfigured auth gracefully
-// December 15, 2025
+// Dashboard - Uses Central Auth from craudiovizai.com
+// December 16, 2025
 
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/contexts/AuthContext';
+import { useCentralAuth, useRequireAuth } from '@/contexts/CentralAuthContext';
 import { 
-  User, Bell, Settings, LogOut, MapPin, 
-  TrendingDown, TrendingUp, Crown, CheckCircle,
-  AlertCircle, Plus, Trash2, CreditCard,
-  Home, Calculator, Users, BarChart3
+  User, Bell, MapPin, TrendingDown, TrendingUp, Crown, 
+  CheckCircle, AlertCircle, Plus, Trash2, ExternalLink,
+  Home, Calculator, Users, BarChart3, Coins, CreditCard
 } from 'lucide-react';
+
+const CENTRAL_URL = 'https://craudiovizai.com';
 
 const US_STATES = [
   { code: 'AL', name: 'Alabama' }, { code: 'AK', name: 'Alaska' }, { code: 'AZ', name: 'Arizona' },
@@ -46,59 +46,50 @@ interface RateAlert {
 }
 
 export default function DashboardPage() {
-  const { user, profile, loading, signOut, updateProfile, isConfigured } = useAuth();
-  const router = useRouter();
+  // Require authentication - redirects to central login if not authenticated
+  const { isAuthenticated, loading: authLoading } = useRequireAuth('/dashboard');
+  
+  const { user, profile, credits, isPremium, updateMortgagePrefs } = useCentralAuth();
+  
   const [alerts, setAlerts] = useState<RateAlert[]>([]);
   const [currentRates, setCurrentRates] = useState<any[]>([]);
   const [editingState, setEditingState] = useState(false);
-  const [selectedState, setSelectedState] = useState(profile?.state || '');
+  const [selectedState, setSelectedState] = useState(profile?.mortgage_state || '');
+  const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
-    // Only redirect if auth is configured and user is not logged in
-    if (!loading && isConfigured && !user) {
-      router.push('/login?redirect=/dashboard');
+    if (isAuthenticated && user) {
+      fetchData();
     }
-  }, [user, loading, router, isConfigured]);
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
-    fetchCurrentRates();
-    if (user) {
-      fetchAlerts();
-    }
-  }, [user]);
-
-  useEffect(() => {
-    setSelectedState(profile?.state || '');
+    setSelectedState(profile?.mortgage_state || '');
   }, [profile]);
 
-  async function fetchAlerts() {
-    if (!user?.email) return;
+  async function fetchData() {
+    setLoadingData(true);
     try {
-      const response = await fetch(`/api/alerts?email=${encodeURIComponent(user.email)}`);
-      const data = await response.json();
-      if (data.success) {
-        setAlerts(data.alerts || []);
-      }
+      const [alertsRes, ratesRes] = await Promise.all([
+        fetch(`/api/alerts?email=${encodeURIComponent(user?.email || '')}`),
+        fetch('/api/mortgage/rates'),
+      ]);
+      
+      const alertsData = await alertsRes.json();
+      const ratesData = await ratesRes.json();
+      
+      if (alertsData.success) setAlerts(alertsData.alerts || []);
+      if (ratesData.success) setCurrentRates(ratesData.rates || []);
     } catch (err) {
-      console.error('Failed to fetch alerts:', err);
-    }
-  }
-
-  async function fetchCurrentRates() {
-    try {
-      const response = await fetch('/api/mortgage/rates');
-      const data = await response.json();
-      if (data.success) {
-        setCurrentRates(data.rates || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch rates:', err);
+      console.error('Failed to fetch data:', err);
+    } finally {
+      setLoadingData(false);
     }
   }
 
   async function handleStateUpdate() {
-    if (selectedState && updateProfile) {
-      await updateProfile({ state: selectedState });
+    if (selectedState) {
+      await updateMortgagePrefs({ state: selectedState });
       localStorage.setItem('mortgage_user_state', selectedState);
       setEditingState(false);
     }
@@ -117,96 +108,26 @@ export default function DashboardPage() {
     return US_STATES.find(s => s.code === code)?.name || code;
   };
 
-  const tierConfig = {
-    free: { label: 'Free', color: 'text-gray-600', bgColor: 'bg-gray-100', alertLimit: 1 },
-    pro: { label: 'Pro', color: 'text-blue-600', bgColor: 'bg-blue-100', alertLimit: 5 },
-    agent: { label: 'Agent', color: 'text-purple-600', bgColor: 'bg-purple-100', alertLimit: 25 },
+  // Alert limits based on subscription
+  const alertLimits = {
+    free: 1,
+    starter: 3,
+    pro: 10,
+    premium: 25,
   };
+  const maxAlerts = alertLimits[profile?.subscription_tier || 'free'];
 
-  const currentTier = tierConfig[profile?.subscription_tier || 'free'];
-
-  if (loading) {
+  if (authLoading || !isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  // If auth is not configured, show a preview dashboard
-  if (!isConfigured) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white py-8">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-              <div>
-                <h1 className="text-3xl font-bold mb-1">Dashboard Preview</h1>
-                <p className="text-blue-100">User accounts coming soon!</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Notice */}
-          <div className="mb-8 p-6 bg-yellow-50 border border-yellow-200 rounded-xl">
-            <div className="flex items-start gap-3">
-              <Settings className="w-6 h-6 text-yellow-600 mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-yellow-800 text-lg">Authentication Coming Soon</h3>
-                <p className="text-yellow-700 mt-1">
-                  User accounts, rate alerts, and personalized dashboards are being set up. 
-                  In the meantime, explore all our free features!
-                </p>
-                <div className="flex flex-wrap gap-3 mt-4">
-                  <Link href="/" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                    View Current Rates
-                  </Link>
-                  <Link href="/compare" className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-                    Compare Lenders
-                  </Link>
-                  <Link href="/calculators" className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-                    Use Calculators
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Current Rates Summary */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Today&apos;s Key Rates</h2>
-              <Link href="/" className="text-blue-600 text-sm hover:underline">View All</Link>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {currentRates.slice(0, 4).map(rate => (
-                <div key={rate.rateType} className="bg-gray-50 rounded-lg p-3">
-                  <div className="text-sm text-gray-500 mb-1">{rate.rateType}</div>
-                  <div className="text-2xl font-bold text-gray-900">{rate.rate?.toFixed(2)}%</div>
-                  <div className={`text-sm flex items-center gap-1 ${
-                    rate.change < 0 ? 'text-green-600' : rate.change > 0 ? 'text-red-600' : 'text-gray-500'
-                  }`}>
-                    {rate.change < 0 ? <TrendingDown className="w-3 h-3" /> : rate.change > 0 ? <TrendingUp className="w-3 h-3" /> : null}
-                    {rate.change?.toFixed(3)}%
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="mt-4 text-gray-600">Loading...</p>
         </div>
       </div>
     );
   }
 
-  // If user is not logged in but auth is configured
-  if (!user) {
-    return null; // Will redirect via useEffect
-  }
-
-  // Full dashboard for logged-in users
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -215,24 +136,38 @@ export default function DashboardPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-3xl font-bold mb-1">
-                Welcome, {profile?.full_name || user.email?.split('@')[0]}!
+                Welcome, {profile?.full_name || user?.email?.split('@')[0]}!
               </h1>
               <p className="text-blue-100">
-                Manage your rate alerts and preferences
+                Your mortgage tracking dashboard
               </p>
             </div>
             <div className="mt-4 md:mt-0 flex items-center gap-3">
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${currentTier.bgColor} ${currentTier.color}`}>
-                {currentTier.label} Plan
+              {/* Credits */}
+              <div className="flex items-center gap-2 px-3 py-2 bg-white/10 backdrop-blur rounded-lg">
+                <Coins className="w-4 h-4 text-amber-300" />
+                <span className="font-bold">{credits?.balance?.toLocaleString() || 0}</span>
+                <span className="text-blue-200 text-sm">credits</span>
+              </div>
+              
+              {/* Subscription */}
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                isPremium ? 'bg-amber-100 text-amber-700' : 'bg-white/20 text-white'
+              }`}>
+                {isPremium && <Crown className="w-3 h-3 inline mr-1" />}
+                {(profile?.subscription_tier || 'free').charAt(0).toUpperCase() + (profile?.subscription_tier || 'free').slice(1)}
               </span>
-              {profile?.subscription_tier === 'free' && (
-                <Link
-                  href="/pricing"
+              
+              {!isPremium && (
+                <a
+                  href={`${CENTRAL_URL}/pricing`}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="flex items-center gap-1 px-4 py-2 bg-white text-blue-600 rounded-lg font-medium hover:bg-blue-50 transition"
                 >
                   <Crown className="w-4 h-4" />
                   Upgrade
-                </Link>
+                </a>
               )}
             </div>
           </div>
@@ -253,7 +188,7 @@ export default function DashboardPage() {
               <div className="space-y-4">
                 <div>
                   <label className="text-sm text-gray-500">Email</label>
-                  <p className="font-medium text-gray-900">{user.email}</p>
+                  <p className="font-medium text-gray-900">{user?.email}</p>
                 </div>
 
                 <div>
@@ -287,7 +222,7 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between">
                       <p className="font-medium text-gray-900 flex items-center gap-1">
                         <MapPin className="w-4 h-4 text-gray-400" />
-                        {profile?.state ? getStateName(profile.state) : 'Not set'}
+                        {profile?.mortgage_state ? getStateName(profile.mortgage_state) : 'Not set'}
                       </p>
                       <button
                         onClick={() => setEditingState(true)}
@@ -298,26 +233,20 @@ export default function DashboardPage() {
                     </div>
                   )}
                 </div>
-
-                <div>
-                  <label className="text-sm text-gray-500">Member Since</label>
-                  <p className="font-medium text-gray-900">
-                    {new Date(profile?.created_at || user.created_at || Date.now()).toLocaleDateString('en-US', {
-                      month: 'long',
-                      year: 'numeric'
-                    })}
-                  </p>
-                </div>
               </div>
 
+              {/* Account Settings Link */}
               <div className="mt-6 pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => signOut()}
-                  className="w-full flex items-center justify-center gap-2 py-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                <a
+                  href={`${CENTRAL_URL}/settings`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
                 >
-                  <LogOut className="w-4 h-4" />
-                  Sign Out
-                </button>
+                  <CreditCard className="w-4 h-4" />
+                  Manage Account & Billing
+                  <ExternalLink className="w-3 h-3" />
+                </a>
               </div>
             </div>
 
@@ -343,6 +272,34 @@ export default function DashboardPage() {
                 </Link>
               </div>
             </div>
+
+            {/* Cross-sell other CR apps */}
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-100 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">More from CR AudioViz AI</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Your account works across all our apps. Try these:
+              </p>
+              <div className="space-y-2">
+                <a
+                  href={`${CENTRAL_URL}/tools`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-3 bg-white rounded-lg hover:shadow-md transition"
+                >
+                  <span className="font-medium">60+ AI Creative Tools</span>
+                  <ExternalLink className="w-4 h-4 text-gray-400" />
+                </a>
+                <a
+                  href="https://crav-cardverse.vercel.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-3 bg-white rounded-lg hover:shadow-md transition"
+                >
+                  <span className="font-medium">CravCards Trading</span>
+                  <ExternalLink className="w-4 h-4 text-gray-400" />
+                </a>
+              </div>
+            </div>
           </div>
 
           {/* Middle & Right Columns */}
@@ -350,23 +307,31 @@ export default function DashboardPage() {
             {/* Current Rates Summary */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Today&apos;s Key Rates</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Today's Key Rates</h2>
                 <Link href="/" className="text-blue-600 text-sm hover:underline">View All</Link>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {currentRates.slice(0, 4).map(rate => (
-                  <div key={rate.rateType} className="bg-gray-50 rounded-lg p-3">
-                    <div className="text-sm text-gray-500 mb-1">{rate.rateType}</div>
-                    <div className="text-2xl font-bold text-gray-900">{rate.rate?.toFixed(2)}%</div>
-                    <div className={`text-sm flex items-center gap-1 ${
-                      rate.change < 0 ? 'text-green-600' : rate.change > 0 ? 'text-red-600' : 'text-gray-500'
-                    }`}>
-                      {rate.change < 0 ? <TrendingDown className="w-3 h-3" /> : rate.change > 0 ? <TrendingUp className="w-3 h-3" /> : null}
-                      {rate.change?.toFixed(3)}%
+              {loadingData ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[1,2,3,4].map(i => (
+                    <div key={i} className="bg-gray-100 rounded-lg p-3 animate-pulse h-20" />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {currentRates.slice(0, 4).map(rate => (
+                    <div key={rate.rateType} className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-sm text-gray-500 mb-1">{rate.rateType}</div>
+                      <div className="text-2xl font-bold text-gray-900">{rate.rate?.toFixed(2)}%</div>
+                      <div className={`text-sm flex items-center gap-1 ${
+                        rate.change < 0 ? 'text-green-600' : rate.change > 0 ? 'text-red-600' : 'text-gray-500'
+                      }`}>
+                        {rate.change < 0 ? <TrendingDown className="w-3 h-3" /> : rate.change > 0 ? <TrendingUp className="w-3 h-3" /> : null}
+                        {rate.change?.toFixed(3)}%
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Rate Alerts */}
@@ -378,9 +343,9 @@ export default function DashboardPage() {
                 </h2>
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-gray-500">
-                    {alerts.length} / {currentTier.alertLimit} alerts
+                    {alerts.length} / {maxAlerts} alerts
                   </span>
-                  {alerts.length < currentTier.alertLimit && (
+                  {alerts.length < maxAlerts && (
                     <Link
                       href="/alerts"
                       className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
@@ -392,7 +357,13 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {alerts.length === 0 ? (
+              {loadingData ? (
+                <div className="space-y-3">
+                  {[1,2].map(i => (
+                    <div key={i} className="bg-gray-100 rounded-lg p-4 animate-pulse h-16" />
+                  ))}
+                </div>
+              ) : alerts.length === 0 ? (
                 <div className="text-center py-8">
                   <Bell className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                   <p className="text-gray-600 mb-2">No rate alerts set</p>
@@ -454,46 +425,21 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {alerts.length >= currentTier.alertLimit && profile?.subscription_tier === 'free' && (
+              {alerts.length >= maxAlerts && !isPremium && (
                 <div className="mt-4 p-4 bg-blue-50 rounded-lg">
                   <p className="text-blue-800 text-sm">
-                    <strong>Want more alerts?</strong> Upgrade to Pro for up to 5 alerts.
+                    <strong>Want more alerts?</strong> Upgrade your plan for more rate alerts.
                   </p>
-                  <Link href="/pricing" className="text-blue-600 text-sm font-medium hover:underline">
+                  <a 
+                    href={`${CENTRAL_URL}/pricing`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 text-sm font-medium hover:underline"
+                  >
                     View plans →
-                  </Link>
+                  </a>
                 </div>
               )}
-            </div>
-
-            {/* Subscription */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <CreditCard className="w-5 h-5" />
-                Subscription
-              </h2>
-              
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div>
-                  <div className="font-medium text-gray-900">{currentTier.label} Plan</div>
-                  <div className="text-sm text-gray-500">
-                    {profile?.subscription_tier === 'free' ? 'Free forever' : 
-                     profile?.subscription_status === 'active' ? 'Active subscription' : 'Subscription ended'}
-                  </div>
-                </div>
-                {profile?.subscription_tier === 'free' ? (
-                  <Link
-                    href="/pricing"
-                    className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700"
-                  >
-                    Upgrade
-                  </Link>
-                ) : (
-                  <button className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-                    Manage
-                  </button>
-                )}
-              </div>
             </div>
           </div>
         </div>
