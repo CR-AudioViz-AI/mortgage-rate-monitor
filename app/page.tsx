@@ -1,6 +1,7 @@
 // CR AudioViz AI - Mortgage Rate Monitor
 // NATIONAL HOMEPAGE - For All US Homebuyers
 // December 22, 2025
+// NOTE: Navigation is in layout.tsx - do not duplicate here
 
 'use client';
 
@@ -38,6 +39,7 @@ const US_STATES = [
 export default function HomePage() {
   const [rates, setRates] = useState<RateData | null>(null);
   const [selectedState, setSelectedState] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch('/api/mortgage/rates')
@@ -45,15 +47,16 @@ export default function HomePage() {
       .then(data => {
         if (data.rates) {
           setRates({
-            rate30yr: data.rates.thirtyYear,
-            rate15yr: data.rates.fifteenYear,
-            fhaRate: data.rates.fhaRate,
-            vaRate: data.rates.vaRate,
-            change: data.rates.weeklyChange,
+            rate30yr: data.rates.thirtyYear || data.rates.rate30yr,
+            rate15yr: data.rates.fifteenYear || data.rates.rate15yr,
+            fhaRate: data.rates.fhaRate || 6.25,
+            vaRate: data.rates.vaRate || 6.0,
+            change: data.rates.weeklyChange || data.rates.change || 0,
           });
         }
       })
-      .catch(console.error);
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, []);
 
   const tools = [
@@ -105,37 +108,7 @@ export default function HomePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {/* Navigation */}
-      <nav className="bg-slate-900/95 backdrop-blur-lg border-b border-slate-800 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center justify-between h-16">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold text-lg">M</span>
-              </div>
-              <div className="hidden sm:block">
-                <span className="text-white font-bold">Mortgage Rate</span>
-                <span className="text-emerald-400 font-bold ml-1">Monitor</span>
-              </div>
-            </Link>
-            <div className="hidden md:flex items-center gap-1">
-              <Link href="/true-cost" className="px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800">💰 True Cost</Link>
-              <Link href="/affordability" className="px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800">📊 Affordability</Link>
-              <Link href="/compare-lenders" className="px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800">🏦 Lenders</Link>
-              <Link href="/property-intelligence" className="px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800">📍 Property Intel</Link>
-              <Link href="/rate-lock" className="px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800">🔒 Rate Lock</Link>
-              <Link href="/refinance" className="px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800">🔄 Refinance</Link>
-            </div>
-            <Link href="/true-cost">
-              <button className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:from-emerald-500 hover:to-teal-500 transition-all">
-                Get Started
-              </button>
-            </Link>
-          </div>
-        </div>
-      </nav>
-
+    <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       {/* Hero Section */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-emerald-600/20 to-cyan-600/20" />
@@ -178,31 +151,35 @@ export default function HomePage() {
             </div>
 
             {/* Live Rates Display */}
-            {rates && (
-              <div className="inline-flex flex-wrap justify-center gap-4 md:gap-6 bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
-                <div className="text-center px-4 md:px-6">
-                  <p className="text-slate-400 text-sm mb-1">30-Year Fixed</p>
-                  <p className="text-3xl md:text-4xl font-bold text-white">{rates.rate30yr}%</p>
-                </div>
-                <div className="w-px bg-slate-700 hidden md:block" />
-                <div className="text-center px-4 md:px-6">
-                  <p className="text-slate-400 text-sm mb-1">15-Year Fixed</p>
-                  <p className="text-3xl md:text-4xl font-bold text-white">{rates.rate15yr}%</p>
-                </div>
-                <div className="w-px bg-slate-700 hidden md:block" />
-                <div className="text-center px-4 md:px-6">
-                  <p className="text-slate-400 text-sm mb-1">FHA 30-Year</p>
-                  <p className="text-3xl md:text-4xl font-bold text-white">{rates.fhaRate}%</p>
-                </div>
-                <div className="w-px bg-slate-700 hidden md:block" />
-                <div className="text-center px-4 md:px-6">
-                  <p className="text-slate-400 text-sm mb-1">Weekly Change</p>
-                  <p className={`text-3xl md:text-4xl font-bold ${rates.change <= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {rates.change > 0 ? '+' : ''}{rates.change}%
-                  </p>
-                </div>
+            <div className="inline-flex flex-wrap justify-center gap-4 md:gap-6 bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
+              <div className="text-center px-4 md:px-6">
+                <p className="text-slate-400 text-sm mb-1">30-Year Fixed</p>
+                <p className="text-3xl md:text-4xl font-bold text-white">
+                  {loading ? '...' : rates ? `${rates.rate30yr}%` : '6.85%'}
+                </p>
               </div>
-            )}
+              <div className="w-px bg-slate-700 hidden md:block" />
+              <div className="text-center px-4 md:px-6">
+                <p className="text-slate-400 text-sm mb-1">15-Year Fixed</p>
+                <p className="text-3xl md:text-4xl font-bold text-white">
+                  {loading ? '...' : rates ? `${rates.rate15yr}%` : '6.10%'}
+                </p>
+              </div>
+              <div className="w-px bg-slate-700 hidden md:block" />
+              <div className="text-center px-4 md:px-6">
+                <p className="text-slate-400 text-sm mb-1">FHA 30-Year</p>
+                <p className="text-3xl md:text-4xl font-bold text-white">
+                  {loading ? '...' : rates ? `${rates.fhaRate}%` : '6.25%'}
+                </p>
+              </div>
+              <div className="w-px bg-slate-700 hidden md:block" />
+              <div className="text-center px-4 md:px-6">
+                <p className="text-slate-400 text-sm mb-1">Weekly Change</p>
+                <p className={`text-3xl md:text-4xl font-bold ${!rates || rates.change <= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {loading ? '...' : rates ? `${rates.change > 0 ? '+' : ''}${rates.change}%` : '-0.02%'}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -221,10 +198,7 @@ export default function HomePage() {
               <span className="text-emerald-400">✓</span> All 50 States Supported
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> 100% Free to Use
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-emerald-400">✓</span> No Login Required
+              <span className="text-emerald-400">✓</span> 100% Free
             </div>
           </div>
         </div>
@@ -273,7 +247,7 @@ export default function HomePage() {
         <div className="text-center mb-12">
           <h2 className="text-3xl font-bold text-white mb-4">Powerful Free Tools</h2>
           <p className="text-slate-400 max-w-2xl mx-auto">
-            Everything you need to make confident mortgage decisions — completely free
+            Everything you need to make confident mortgage decisions
           </p>
         </div>
 
@@ -366,58 +340,23 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* For Professionals */}
-      <div className="max-w-7xl mx-auto px-4 py-16">
-        <div className="bg-slate-800/50 rounded-3xl p-8 md:p-12 border border-slate-700">
-          <div className="grid md:grid-cols-2 gap-8 items-center">
-            <div>
-              <span className="text-emerald-400 text-sm font-medium">FOR PROFESSIONALS</span>
-              <h2 className="text-3xl font-bold text-white mt-2 mb-4">
-                Are You a Lender or Real Estate Agent?
-              </h2>
-              <p className="text-slate-300 mb-6">
-                Get your institution listed, access premium features, or partner with us to reach 
-                homebuyers actively searching for mortgages.
-              </p>
-              <ul className="space-y-3 text-slate-300 mb-6">
-                <li className="flex items-center gap-2">
-                  <span className="text-emerald-400">✓</span> Featured lender placement
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-emerald-400">✓</span> Lead generation tools
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-emerald-400">✓</span> White-label calculators
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-emerald-400">✓</span> API access
-                </li>
-              </ul>
-              <Link href="/pricing">
-                <button className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-6 py-3 rounded-xl font-medium hover:from-emerald-500 hover:to-teal-500 transition-all">
-                  View Professional Plans →
-                </button>
-              </Link>
+      {/* CR AudioViz AI Cross-Promotion Banner */}
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="bg-gradient-to-r from-slate-800 to-slate-800/50 rounded-2xl p-6 border border-slate-700 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
+              <span className="text-white font-bold text-lg">CR</span>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-900/50 rounded-xl p-4 text-center">
-                <p className="text-3xl font-bold text-white">$0</p>
-                <p className="text-slate-400 text-sm">Free for Homebuyers</p>
-              </div>
-              <div className="bg-slate-900/50 rounded-xl p-4 text-center">
-                <p className="text-3xl font-bold text-emerald-400">Pro</p>
-                <p className="text-slate-400 text-sm">$9.99/month</p>
-              </div>
-              <div className="bg-slate-900/50 rounded-xl p-4 text-center">
-                <p className="text-3xl font-bold text-blue-400">Agent</p>
-                <p className="text-slate-400 text-sm">$29.99/month</p>
-              </div>
-              <div className="bg-slate-900/50 rounded-xl p-4 text-center">
-                <p className="text-3xl font-bold text-purple-400">Lender</p>
-                <p className="text-slate-400 text-sm">Contact Us</p>
-              </div>
+            <div>
+              <p className="text-white font-medium">Powered by CR AudioViz AI</p>
+              <p className="text-slate-400 text-sm">60+ AI-powered creative tools • Free to try</p>
             </div>
           </div>
+          <a href="https://craudiovizai.com" target="_blank" rel="noopener noreferrer">
+            <button className="bg-slate-700 text-white px-6 py-2 rounded-lg hover:bg-slate-600 transition-all text-sm">
+              Explore Our Tools →
+            </button>
+          </a>
         </div>
       </div>
 
@@ -454,9 +393,9 @@ export default function HomePage() {
               <p className="text-slate-400 text-sm">
                 The mortgage calculator that tells the truth. Free for all homebuyers nationwide.
               </p>
-              <p className="text-slate-500 text-xs mt-4">
-                Built by CR AudioViz AI
-              </p>
+              <a href="https://craudiovizai.com" target="_blank" rel="noopener noreferrer" className="text-emerald-400 text-sm hover:text-emerald-300 mt-2 inline-block">
+                A CR AudioViz AI Product
+              </a>
             </div>
             <div>
               <h4 className="text-white font-medium mb-4">Calculators</h4>
