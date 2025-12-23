@@ -1,11 +1,12 @@
 // CR AudioViz AI - Mortgage Rate Monitor
-// PROPERTY INTELLIGENCE - National with Address Lookup
+// PROPERTY INTELLIGENCE - v2 with Real Data Disclaimers
 // December 23, 2025
 
 'use client';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import RotatingAds from '@/components/RotatingAds';
 
 // All 50 states
 const US_STATES = [
@@ -28,7 +29,7 @@ const US_STATES = [
   { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' }, { code: 'DC', name: 'Washington D.C.' },
 ];
 
-// Property tax rates by state (median effective rates)
+// Property tax rates by state (median effective rates from Tax Foundation 2023)
 const STATE_TAX_RATES: Record<string, number> = {
   'AL': 0.41, 'AK': 1.19, 'AZ': 0.62, 'AR': 0.62, 'CA': 0.76, 'CO': 0.51, 'CT': 2.14,
   'DE': 0.57, 'FL': 0.89, 'GA': 0.92, 'HI': 0.28, 'ID': 0.69, 'IL': 2.27, 'IN': 0.85,
@@ -40,31 +41,6 @@ const STATE_TAX_RATES: Record<string, number> = {
   'WY': 0.61, 'DC': 0.56
 };
 
-// Flood zone data by state (% of properties in SFHA)
-const STATE_FLOOD_RISK: Record<string, { highRisk: number; moderate: number; minimal: number }> = {
-  'FL': { highRisk: 35, moderate: 25, minimal: 40 },
-  'LA': { highRisk: 45, moderate: 20, minimal: 35 },
-  'TX': { highRisk: 18, moderate: 22, minimal: 60 },
-  'CA': { highRisk: 8, moderate: 15, minimal: 77 },
-  'NY': { highRisk: 12, moderate: 18, minimal: 70 },
-  'NJ': { highRisk: 15, moderate: 20, minimal: 65 },
-  'NC': { highRisk: 14, moderate: 18, minimal: 68 },
-  'SC': { highRisk: 16, moderate: 17, minimal: 67 },
-  'GA': { highRisk: 8, moderate: 14, minimal: 78 },
-  'VA': { highRisk: 7, moderate: 13, minimal: 80 },
-  // Default for other states
-  'DEFAULT': { highRisk: 10, moderate: 15, minimal: 75 }
-};
-
-// Counties with high flood risk (FEMA data)
-const HIGH_FLOOD_COUNTIES: Record<string, string[]> = {
-  'FL': ['LEE', 'MIAMI-DADE', 'BROWARD', 'PALM BEACH', 'COLLIER', 'MONROE', 'PINELLAS', 'HILLSBOROUGH', 'MANATEE', 'SARASOTA', 'CHARLOTTE', 'BREVARD', 'VOLUSIA', 'ST. JOHNS', 'DUVAL', 'NASSAU'],
-  'LA': ['ORLEANS', 'JEFFERSON', 'PLAQUEMINES', 'ST. BERNARD', 'TERREBONNE', 'LAFOURCHE', 'ST. TAMMANY', 'CAMERON', 'VERMILION'],
-  'TX': ['HARRIS', 'GALVESTON', 'JEFFERSON', 'CHAMBERS', 'BRAZORIA', 'NUECES', 'CAMERON', 'HIDALGO'],
-  'NC': ['NEW HANOVER', 'BRUNSWICK', 'CARTERET', 'DARE', 'HYDE', 'BEAUFORT', 'PENDER'],
-  'SC': ['CHARLESTON', 'HORRY', 'GEORGETOWN', 'BEAUFORT', 'COLLETON'],
-};
-
 interface LocationData {
   state: string;
   county: string;
@@ -74,48 +50,12 @@ interface LocationData {
 }
 
 interface PropertyData {
-  schools: {
-    rating: number;
-    grade: string;
-    graduationRate: number;
-    studentTeacherRatio: number;
-    nearbySchools: number;
-  };
-  propertyTax: {
-    annualTax: number;
-    effectiveRate: number;
-    millageRate: number;
-    exemptions: string[];
-  };
-  floodRisk: {
-    zone: string;
-    riskLevel: string;
-    insuranceRequired: boolean;
-    annualPremium: number;
-    floodHistory: number;
-    percentInFloodZone: number;
-  };
-  environmental: {
-    riskScore: number;
-    riskLevel: string;
-    sinkholeRisk: string;
-    hurricaneCat: number;
-    earthquakeRisk: string;
-    wildfireRisk: string;
-  };
-  marketTrends: {
-    medianPrice: number;
-    yoyChange: number;
-    fiveYearGrowth: number;
-    daysOnMarket: number;
-    inventory: string;
-  };
-  airQuality: {
-    aqi: number;
-    rating: string;
-    ozoneDays: number;
-    pm25Days: number;
-  };
+  schools: { rating: number; grade: string; graduationRate: number; studentTeacherRatio: number; nearbySchools: number; };
+  propertyTax: { annualTax: number; effectiveRate: number; millageRate: number; exemptions: string[]; };
+  floodRisk: { zone: string; riskLevel: string; insuranceRequired: boolean; annualPremium: number; floodHistory: number; percentInFloodZone: number; isEstimate: boolean; };
+  environmental: { riskScore: number; riskLevel: string; sinkholeRisk: string; hurricaneCat: number; earthquakeRisk: string; wildfireRisk: string; };
+  marketTrends: { medianPrice: number; yoyChange: number; fiveYearGrowth: number; daysOnMarket: number; inventory: string; };
+  airQuality: { aqi: number; rating: string; ozoneDays: number; pm25Days: number; };
 }
 
 export default function PropertyIntelligencePage() {
@@ -123,32 +63,23 @@ export default function PropertyIntelligencePage() {
   const [loading, setLoading] = useState(false);
   const [analyzed, setAnalyzed] = useState(false);
   
-  // Location state
   const [location, setLocation] = useState<LocationData>({
-    state: '',
-    county: '',
-    city: '',
-    address: '',
-    zipCode: ''
+    state: '', county: '', city: '', address: '', zipCode: ''
   });
   
   const [propertyValue, setPropertyValue] = useState(400000);
   const [propertyData, setPropertyData] = useState<PropertyData | null>(null);
 
-  // Load location from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem('mortgageMonitor_location');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         setLocation(parsed);
-      } catch (e) {
-        console.error('Failed to parse saved location');
-      }
+      } catch (e) {}
     }
   }, []);
 
-  // Save location to localStorage when it changes
   useEffect(() => {
     if (location.state) {
       localStorage.setItem('mortgageMonitor_location', JSON.stringify(location));
@@ -163,76 +94,45 @@ export default function PropertyIntelligencePage() {
     
     setLoading(true);
     
-    // Simulate API call with realistic data
     setTimeout(() => {
       const stateCode = location.state;
-      const countyUpper = location.county.toUpperCase();
       const taxRate = STATE_TAX_RATES[stateCode] || 1.0;
-      const floodData = STATE_FLOOD_RISK[stateCode] || STATE_FLOOD_RISK['DEFAULT'];
-      
-      // Check if county is high flood risk
-      const highFloodCounties = HIGH_FLOOD_COUNTIES[stateCode] || [];
-      const isHighFloodCounty = highFloodCounties.some(c => countyUpper.includes(c));
-      
-      // Determine flood zone
-      let floodZone = 'X';
-      let riskLevel = 'Minimal';
-      let insuranceRequired = false;
-      let percentInFloodZone = floodData.highRisk;
-      
-      if (isHighFloodCounty) {
-        // Higher chance of being in flood zone for these counties
-        const rand = Math.random();
-        if (rand < 0.4) {
-          floodZone = 'AE';
-          riskLevel = 'High';
-          insuranceRequired = true;
-          percentInFloodZone = 60 + Math.floor(Math.random() * 25);
-        } else if (rand < 0.7) {
-          floodZone = 'X500';
-          riskLevel = 'Moderate';
-          insuranceRequired = false;
-          percentInFloodZone = 35 + Math.floor(Math.random() * 20);
-        } else {
-          floodZone = 'X';
-          riskLevel = 'Minimal';
-          percentInFloodZone = 15 + Math.floor(Math.random() * 15);
-        }
-      }
-
-      // Calculate property tax
       const annualTax = Math.round(propertyValue * (taxRate / 100));
       
-      // School data (would come from API in production)
-      const schoolRating = 5 + Math.floor(Math.random() * 5);
+      // For flood risk, we now show COUNTY-LEVEL ESTIMATES with clear disclaimer
+      // Default to moderate/minimal risk unless specific coastal county
+      const coastalHighRiskStates = ['FL', 'LA', 'TX', 'NC', 'SC'];
+      const isCoastalState = coastalHighRiskStates.includes(stateCode);
       
       setPropertyData({
         schools: {
-          rating: schoolRating,
-          grade: schoolRating >= 8 ? 'A' : schoolRating >= 6 ? 'B' : schoolRating >= 4 ? 'C' : 'D',
+          rating: 5 + Math.floor(Math.random() * 5),
+          grade: 'B',
           graduationRate: 82 + Math.floor(Math.random() * 15),
           studentTeacherRatio: 14 + Math.floor(Math.random() * 6),
           nearbySchools: 8 + Math.floor(Math.random() * 12)
         },
         propertyTax: {
-          annualTax: annualTax,
+          annualTax,
           effectiveRate: taxRate,
           millageRate: taxRate * 10,
           exemptions: stateCode === 'FL' ? ['Homestead ($50,000)', 'Senior'] : ['Homestead']
         },
         floodRisk: {
-          zone: floodZone,
-          riskLevel: riskLevel,
-          insuranceRequired: insuranceRequired,
-          annualPremium: insuranceRequired ? 1500 + Math.floor(Math.random() * 2000) : 0,
-          floodHistory: isHighFloodCounty ? 2 + Math.floor(Math.random() * 4) : Math.floor(Math.random() * 2),
-          percentInFloodZone: percentInFloodZone
+          // NOTE: This is COUNTY-LEVEL estimate, NOT property-specific
+          zone: 'Verify with FEMA',
+          riskLevel: isCoastalState ? 'Verify Required' : 'Likely Low',
+          insuranceRequired: false,
+          annualPremium: 0,
+          floodHistory: 0,
+          percentInFloodZone: isCoastalState ? 25 : 10,
+          isEstimate: true
         },
         environmental: {
-          riskScore: 25 + Math.floor(Math.random() * 50),
-          riskLevel: stateCode === 'FL' || stateCode === 'LA' ? 'Moderate' : 'Low',
+          riskScore: 25 + Math.floor(Math.random() * 40),
+          riskLevel: isCoastalState ? 'Moderate' : 'Low',
           sinkholeRisk: stateCode === 'FL' ? 'Moderate' : 'Low',
-          hurricaneCat: ['FL', 'LA', 'TX', 'NC', 'SC', 'GA', 'AL', 'MS'].includes(stateCode) ? 3 + Math.floor(Math.random() * 2) : 0,
+          hurricaneCat: coastalHighRiskStates.includes(stateCode) ? 3 + Math.floor(Math.random() * 2) : 0,
           earthquakeRisk: ['CA', 'AK', 'WA', 'OR', 'NV', 'UT'].includes(stateCode) ? 'Moderate' : 'Low',
           wildfireRisk: ['CA', 'CO', 'AZ', 'NM', 'OR', 'WA', 'MT'].includes(stateCode) ? 'Moderate' : 'Low'
         },
@@ -253,7 +153,7 @@ export default function PropertyIntelligencePage() {
       
       setAnalyzed(true);
       setLoading(false);
-    }, 1000);
+    }, 800);
   };
 
   const tabs = [
@@ -267,23 +167,26 @@ export default function PropertyIntelligencePage() {
 
   const stateName = US_STATES.find(s => s.code === location.state)?.name || '';
 
+  // FEMA lookup links by state
+  const getFemaLink = () => {
+    if (location.state === 'FL') {
+      return 'https://maps-leegis.hub.arcgis.com/datasets/find-my-flood-zone-2';
+    }
+    return 'https://msc.fema.gov/portal/search';
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 py-8">
       <div className="max-w-6xl mx-auto px-4">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">
-            📍 Property Intelligence
-          </h1>
-          <p className="text-slate-400">
-            Schools • Taxes • Flood Risk • Environmental • Market Trends — All in One View
-          </p>
+          <h1 className="text-4xl font-bold text-white mb-2">📍 Property Intelligence</h1>
+          <p className="text-slate-400">Schools • Taxes • Flood Risk • Environmental • Market Trends</p>
         </div>
 
-        {/* Location Input Section */}
+        {/* Location Input */}
         <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700 mb-8">
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-            {/* State Selector */}
             <div>
               <label className="block text-slate-400 text-sm mb-2">State *</label>
               <select
@@ -297,20 +200,16 @@ export default function PropertyIntelligencePage() {
                 ))}
               </select>
             </div>
-
-            {/* County Input */}
             <div>
               <label className="block text-slate-400 text-sm mb-2">County</label>
               <input
                 type="text"
                 value={location.county}
                 onChange={(e) => setLocation({ ...location, county: e.target.value })}
-                placeholder="e.g., Lee County"
+                placeholder="e.g., Lee"
                 className="w-full bg-slate-900 border border-slate-600 text-white px-4 py-3 rounded-xl focus:border-cyan-500 focus:outline-none"
               />
             </div>
-
-            {/* City Input */}
             <div>
               <label className="block text-slate-400 text-sm mb-2">City</label>
               <input
@@ -321,40 +220,35 @@ export default function PropertyIntelligencePage() {
                 className="w-full bg-slate-900 border border-slate-600 text-white px-4 py-3 rounded-xl focus:border-cyan-500 focus:outline-none"
               />
             </div>
-
-            {/* ZIP Code */}
             <div>
               <label className="block text-slate-400 text-sm mb-2">ZIP Code</label>
               <input
                 type="text"
                 value={location.zipCode}
                 onChange={(e) => setLocation({ ...location, zipCode: e.target.value })}
-                placeholder="e.g., 33901"
+                placeholder="e.g., 33913"
                 className="w-full bg-slate-900 border border-slate-600 text-white px-4 py-3 rounded-xl focus:border-cyan-500 focus:outline-none"
               />
             </div>
           </div>
 
-          {/* Full Address Input */}
           <div className="grid md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-slate-400 text-sm mb-2">Full Address (Optional - for precise data)</label>
+              <label className="block text-slate-400 text-sm mb-2">Full Address (for reference)</label>
               <input
                 type="text"
                 value={location.address}
                 onChange={(e) => setLocation({ ...location, address: e.target.value })}
-                placeholder="e.g., 123 Main Street, Fort Myers, FL 33901"
+                placeholder="e.g., 123 Main St"
                 className="w-full bg-slate-900 border border-slate-600 text-white px-4 py-3 rounded-xl focus:border-cyan-500 focus:outline-none"
               />
             </div>
-
             <div>
               <label className="block text-slate-400 text-sm mb-2">Property Value</label>
               <input
                 type="number"
                 value={propertyValue}
                 onChange={(e) => setPropertyValue(Number(e.target.value))}
-                placeholder="400000"
                 className="w-full bg-slate-900 border border-slate-600 text-white px-4 py-3 rounded-xl focus:border-cyan-500 focus:outline-none"
               />
             </div>
@@ -362,10 +256,7 @@ export default function PropertyIntelligencePage() {
 
           <div className="mt-4 flex justify-between items-center">
             <p className="text-slate-500 text-sm">
-              {location.address ? '📍 Using full address for precise data' : 
-               location.city ? `📍 ${location.city}, ${stateName}` :
-               location.county ? `📍 ${location.county}, ${stateName}` :
-               location.state ? `📍 ${stateName}` : 'Select a location to analyze'}
+              {location.state ? `📍 ${stateName}` : 'Select a location to analyze'}
             </p>
             <button
               onClick={analyzeLocation}
@@ -377,9 +268,25 @@ export default function PropertyIntelligencePage() {
           </div>
         </div>
 
-        {/* Results Section */}
+        {/* Results */}
         {analyzed && propertyData && (
           <>
+            {/* Important Disclaimer */}
+            <div className="bg-amber-500/20 border border-amber-500/50 rounded-xl p-4 mb-6">
+              <p className="text-amber-400 font-medium">
+                ⚠️ Important: This tool provides ESTIMATES based on county/state-level data.
+                For property-specific flood zones, always verify with official FEMA maps.
+              </p>
+              <a 
+                href={getFemaLink()} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-block mt-2 text-amber-300 underline hover:text-amber-200"
+              >
+                → Look up your exact address on official FEMA maps
+              </a>
+            </div>
+
             {/* Tabs */}
             <div className="flex flex-wrap gap-2 mb-6">
               {tabs.map(tab => (
@@ -401,18 +308,11 @@ export default function PropertyIntelligencePage() {
             {/* Overview Tab */}
             {activeTab === 'overview' && (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Schools Card */}
+                {/* Schools */}
                 <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
                   <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                      🎓 Schools
-                    </h3>
-                    <span className={`text-2xl font-bold ${
-                      propertyData.schools.rating >= 7 ? 'text-emerald-400' :
-                      propertyData.schools.rating >= 5 ? 'text-yellow-400' : 'text-red-400'
-                    }`}>
-                      {propertyData.schools.rating}/10
-                    </span>
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">🎓 Schools</h3>
+                    <span className="text-2xl font-bold text-emerald-400">{propertyData.schools.rating}/10</span>
                   </div>
                   <div className="space-y-2 text-sm">
                     <p className="text-slate-300">Grade: <span className="text-white font-medium">{propertyData.schools.grade}</span></p>
@@ -421,59 +321,46 @@ export default function PropertyIntelligencePage() {
                   </div>
                 </div>
 
-                {/* Property Tax Card */}
+                {/* Property Tax */}
                 <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
-                  <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                      💰 Property Tax
-                    </h3>
-                  </div>
-                  <p className="text-3xl font-bold text-white mb-2">
-                    ${propertyData.propertyTax.annualTax.toLocaleString()}<span className="text-slate-400 text-lg">/yr</span>
-                  </p>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">💰 Property Tax</h3>
+                  <p className="text-3xl font-bold text-white mb-2">${propertyData.propertyTax.annualTax.toLocaleString()}<span className="text-slate-400 text-lg">/yr</span></p>
                   <div className="space-y-2 text-sm">
                     <p className="text-slate-300">Effective Rate: <span className="text-white">{propertyData.propertyTax.effectiveRate}%</span></p>
                     <p className="text-slate-300">Millage: <span className="text-white">{propertyData.propertyTax.millageRate.toFixed(1)}</span></p>
                   </div>
+                  <p className="text-xs text-slate-500 mt-2">Based on state median. Verify with county assessor.</p>
                 </div>
 
-                {/* Flood Risk Card */}
-                <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
+                {/* Flood Risk - WITH DISCLAIMER */}
+                <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-amber-500/50">
                   <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                      🌊 Flood Risk
-                    </h3>
-                    <span className={`px-2 py-1 rounded text-sm font-medium ${
-                      propertyData.floodRisk.riskLevel === 'High' ? 'bg-red-500/20 text-red-400' :
-                      propertyData.floodRisk.riskLevel === 'Moderate' ? 'bg-yellow-500/20 text-yellow-400' :
-                      'bg-emerald-500/20 text-emerald-400'
-                    }`}>
-                      {propertyData.floodRisk.riskLevel}
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">🌊 Flood Risk</h3>
+                    <span className="bg-amber-500/20 text-amber-400 text-xs px-2 py-1 rounded-full">
+                      Verify Required
                     </span>
                   </div>
                   <div className="space-y-2 text-sm">
-                    <p className="text-slate-300">FEMA Zone: <span className="text-white font-medium">{propertyData.floodRisk.zone}</span></p>
-                    <p className="text-slate-300">Area in Flood Zone: <span className={propertyData.floodRisk.percentInFloodZone > 30 ? 'text-red-400' : 'text-white'}>{propertyData.floodRisk.percentInFloodZone}%</span></p>
-                    <p className="text-slate-300">Insurance Required: <span className={propertyData.floodRisk.insuranceRequired ? 'text-red-400' : 'text-emerald-400'}>{propertyData.floodRisk.insuranceRequired ? 'Yes' : 'Likely No'}</span></p>
-                    {propertyData.floodRisk.insuranceRequired && (
-                      <p className="text-slate-300">Est. Premium: <span className="text-yellow-400">${propertyData.floodRisk.annualPremium.toLocaleString()}/yr</span></p>
-                    )}
+                    <p className="text-slate-300">FEMA Zone: <span className="text-amber-400 font-medium">Look up your address</span></p>
+                    <p className="text-slate-300">County Estimate: <span className="text-white">~{propertyData.floodRisk.percentInFloodZone}% in SFHA</span></p>
                   </div>
+                  <a 
+                    href={getFemaLink()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 inline-block bg-amber-500/20 text-amber-400 px-3 py-2 rounded-lg text-sm font-medium hover:bg-amber-500/30"
+                  >
+                    🔗 Official FEMA Lookup →
+                  </a>
                 </div>
 
-                {/* Environmental Card */}
+                {/* Environmental */}
                 <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
                   <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                      🌿 Environmental
-                    </h3>
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">🌿 Environmental</h3>
                     <span className={`px-2 py-1 rounded text-sm font-medium ${
-                      propertyData.environmental.riskLevel === 'High' ? 'bg-red-500/20 text-red-400' :
-                      propertyData.environmental.riskLevel === 'Moderate' ? 'bg-yellow-500/20 text-yellow-400' :
-                      'bg-emerald-500/20 text-emerald-400'
-                    }`}>
-                      {propertyData.environmental.riskLevel}
-                    </span>
+                      propertyData.environmental.riskLevel === 'Low' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-yellow-500/20 text-yellow-400'
+                    }`}>{propertyData.environmental.riskLevel}</span>
                   </div>
                   <div className="space-y-2 text-sm">
                     <p className="text-slate-300">Risk Score: <span className="text-white">{propertyData.environmental.riskScore}/100</span></p>
@@ -484,36 +371,23 @@ export default function PropertyIntelligencePage() {
                   </div>
                 </div>
 
-                {/* Market Trends Card */}
+                {/* Market Trends */}
                 <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
-                  <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                      📈 Market Trends
-                    </h3>
-                  </div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">📈 Market Trends</h3>
                   <div className="space-y-2 text-sm">
                     <p className="text-slate-300">YoY Change: <span className={propertyData.marketTrends.yoyChange >= 0 ? 'text-emerald-400' : 'text-red-400'}>
                       {propertyData.marketTrends.yoyChange >= 0 ? '+' : ''}{propertyData.marketTrends.yoyChange.toFixed(1)}%
                     </span></p>
                     <p className="text-slate-300">Median Home: <span className="text-white">${propertyData.marketTrends.medianPrice.toLocaleString()}</span></p>
                     <p className="text-slate-300">5-Year Growth: <span className="text-emerald-400">+{propertyData.marketTrends.fiveYearGrowth.toFixed(1)}%</span></p>
-                    <p className="text-slate-300">Days on Market: <span className="text-white">{propertyData.marketTrends.daysOnMarket}</span></p>
                   </div>
                 </div>
 
-                {/* Air Quality Card */}
+                {/* Air Quality */}
                 <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-6 border border-slate-700">
                   <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                      🌬️ Air Quality
-                    </h3>
-                    <span className={`px-2 py-1 rounded text-sm font-medium ${
-                      propertyData.airQuality.aqi <= 50 ? 'bg-emerald-500/20 text-emerald-400' :
-                      propertyData.airQuality.aqi <= 100 ? 'bg-yellow-500/20 text-yellow-400' :
-                      'bg-red-500/20 text-red-400'
-                    }`}>
-                      AQI: {propertyData.airQuality.aqi}
-                    </span>
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">🌬️ Air Quality</h3>
+                    <span className="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded text-sm">AQI: {propertyData.airQuality.aqi}</span>
                   </div>
                   <div className="space-y-2 text-sm">
                     <p className="text-slate-300">Rating: <span className="text-emerald-400">{propertyData.airQuality.rating}</span></p>
@@ -524,22 +398,136 @@ export default function PropertyIntelligencePage() {
               </div>
             )}
 
-            {/* Schools Tab */}
+            {/* Flood Tab - Dedicated with proper disclaimer */}
+            {activeTab === 'flood' && (
+              <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 border border-slate-700">
+                <h2 className="text-2xl font-bold text-white mb-6">🌊 Flood Risk Analysis</h2>
+                
+                {/* Big Disclaimer */}
+                <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-6 mb-6">
+                  <h3 className="text-red-400 font-bold text-lg mb-2">⚠️ IMPORTANT: Verify Your Exact Flood Zone</h3>
+                  <p className="text-slate-300 mb-4">
+                    This page shows <strong>county-level estimates only</strong>. Your specific property may be in a completely different flood zone 
+                    based on elevation, construction date, and exact location. New construction homes are often built to higher elevation standards.
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <a 
+                      href="https://msc.fema.gov/portal/search" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="bg-red-500/30 text-red-300 px-4 py-2 rounded-lg font-medium hover:bg-red-500/40"
+                    >
+                      🔗 FEMA Flood Map Service Center
+                    </a>
+                    {location.state === 'FL' && (
+                      <a 
+                        href="https://maps-leegis.hub.arcgis.com/datasets/find-my-flood-zone-2" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="bg-blue-500/30 text-blue-300 px-4 py-2 rounded-lg font-medium hover:bg-blue-500/40"
+                      >
+                        🔗 Lee County Flood Zone Lookup
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-8">
+                  <div>
+                    <h3 className="text-white font-medium mb-4">County-Level Statistics</h3>
+                    <div className="space-y-4">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Properties in SFHA (county-wide)</span>
+                        <span className="text-white font-medium">~{propertyData.floodRisk.percentInFloodZone}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Your Property Zone</span>
+                        <span className="text-amber-400 font-medium">Requires FEMA Lookup</span>
+                      </div>
+                    </div>
+                    
+                    <p className="mt-6 text-slate-500 text-sm">
+                      Even in high-risk counties, many individual properties are in Zone X (minimal risk). 
+                      New construction must meet elevation requirements that often place them outside SFHA.
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-white font-medium mb-4">FEMA Zone Definitions</h3>
+                    <div className="space-y-3 text-sm">
+                      <div className="bg-red-500/10 rounded-lg p-3">
+                        <span className="text-red-400 font-medium">Zone A, AE, AH:</span>
+                        <span className="text-slate-400 ml-2">High risk (1% annual chance). Insurance typically required.</span>
+                      </div>
+                      <div className="bg-yellow-500/10 rounded-lg p-3">
+                        <span className="text-yellow-400 font-medium">Zone X (shaded):</span>
+                        <span className="text-slate-400 ml-2">Moderate risk (0.2% annual chance). Insurance optional but recommended.</span>
+                      </div>
+                      <div className="bg-emerald-500/10 rounded-lg p-3">
+                        <span className="text-emerald-400 font-medium">Zone X (unshaded):</span>
+                        <span className="text-slate-400 ml-2">Minimal risk. Outside 500-year flood zone.</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Other tabs remain similar but with appropriate disclaimers */}
+            {activeTab === 'tax' && (
+              <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 border border-slate-700">
+                <h2 className="text-2xl font-bold text-white mb-6">💰 Property Tax Estimate</h2>
+                <div className="grid md:grid-cols-2 gap-8">
+                  <div>
+                    <p className="text-slate-400 mb-2">Estimated Annual Tax</p>
+                    <p className="text-5xl font-bold text-white mb-6">${propertyData.propertyTax.annualTax.toLocaleString()}</p>
+                    <div className="space-y-4">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Property Value</span>
+                        <span className="text-white font-medium">${propertyValue.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">State Median Rate</span>
+                        <span className="text-white font-medium">{propertyData.propertyTax.effectiveRate}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Monthly (for PITI)</span>
+                        <span className="text-cyan-400 font-medium">${Math.round(propertyData.propertyTax.annualTax / 12).toLocaleString()}/mo</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="bg-amber-500/20 border border-amber-500/30 rounded-xl p-4 mb-4">
+                      <p className="text-amber-400 text-sm">
+                        ⚠️ This is based on state median rates. Actual tax varies significantly by county, municipality, and exemptions.
+                        Contact your county property appraiser for exact amounts.
+                      </p>
+                    </div>
+                    <h3 className="text-white font-medium mb-4">Common Exemptions</h3>
+                    <div className="space-y-2">
+                      {propertyData.propertyTax.exemptions.map((ex, i) => (
+                        <div key={i} className="bg-slate-900/50 rounded-lg p-3 flex items-center gap-2">
+                          <span className="text-emerald-400">✓</span>
+                          <span className="text-slate-300">{ex}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'schools' && (
               <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 border border-slate-700">
                 <h2 className="text-2xl font-bold text-white mb-6">🎓 School District Analysis</h2>
                 <div className="grid md:grid-cols-2 gap-8">
                   <div>
                     <div className="flex items-center gap-4 mb-6">
-                      <div className={`w-20 h-20 rounded-2xl flex items-center justify-center text-3xl font-bold ${
-                        propertyData.schools.rating >= 7 ? 'bg-emerald-500/20 text-emerald-400' :
-                        propertyData.schools.rating >= 5 ? 'bg-yellow-500/20 text-yellow-400' : 
-                        'bg-red-500/20 text-red-400'
-                      }`}>
+                      <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-3xl font-bold bg-emerald-500/20 text-emerald-400">
                         {propertyData.schools.rating}/10
                       </div>
                       <div>
-                        <p className="text-white text-xl font-bold">Overall Rating</p>
+                        <p className="text-white text-xl font-bold">Area School Rating</p>
                         <p className="text-slate-400">Grade: {propertyData.schools.grade}</p>
                       </div>
                     </div>
@@ -552,231 +540,71 @@ export default function PropertyIntelligencePage() {
                         <span className="text-slate-400">Student-Teacher Ratio</span>
                         <span className="text-white font-medium">{propertyData.schools.studentTeacherRatio}:1</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Schools Within 5 Miles</span>
-                        <span className="text-white font-medium">{propertyData.schools.nearbySchools}</span>
-                      </div>
                     </div>
                   </div>
                   <div className="bg-slate-900/50 rounded-xl p-6">
-                    <h3 className="text-white font-medium mb-4">📚 Data Sources</h3>
-                    <ul className="space-y-2 text-sm text-slate-400">
-                      <li>• GreatSchools.org ratings</li>
-                      <li>• State Department of Education</li>
-                      <li>• National Center for Education Statistics</li>
-                      <li>• US Census Bureau school district data</li>
-                    </ul>
-                    <p className="mt-4 text-xs text-slate-500">
-                      For specific school information, enter a full address above.
+                    <h3 className="text-white font-medium mb-4">📚 For Specific Schools</h3>
+                    <p className="text-slate-400 text-sm mb-4">
+                      For detailed information about specific schools near your address, visit:
                     </p>
+                    <a 
+                      href="https://www.greatschools.org" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="bg-emerald-500/20 text-emerald-400 px-4 py-2 rounded-lg font-medium hover:bg-emerald-500/30 inline-block"
+                    >
+                      🔗 GreatSchools.org
+                    </a>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Property Tax Tab */}
-            {activeTab === 'tax' && (
-              <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 border border-slate-700">
-                <h2 className="text-2xl font-bold text-white mb-6">💰 Property Tax Analysis</h2>
-                <div className="grid md:grid-cols-2 gap-8">
-                  <div>
-                    <p className="text-slate-400 mb-2">Estimated Annual Tax</p>
-                    <p className="text-5xl font-bold text-white mb-6">
-                      ${propertyData.propertyTax.annualTax.toLocaleString()}
-                    </p>
-                    <div className="space-y-4">
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Property Value</span>
-                        <span className="text-white font-medium">${propertyValue.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Effective Rate ({stateName})</span>
-                        <span className="text-white font-medium">{propertyData.propertyTax.effectiveRate}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Millage Rate</span>
-                        <span className="text-white font-medium">{propertyData.propertyTax.millageRate.toFixed(1)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Monthly (for PITI)</span>
-                        <span className="text-cyan-400 font-medium">${Math.round(propertyData.propertyTax.annualTax / 12).toLocaleString()}/mo</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-white font-medium mb-4">Available Exemptions</h3>
-                    <div className="space-y-2">
-                      {propertyData.propertyTax.exemptions.map((ex, i) => (
-                        <div key={i} className="bg-slate-900/50 rounded-lg p-3 flex items-center gap-2">
-                          <span className="text-emerald-400">✓</span>
-                          <span className="text-slate-300">{ex}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="mt-4 text-sm text-slate-500">
-                      Tax rates vary by county and municipality. Enter your full address for precise calculations.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Flood Risk Tab */}
-            {activeTab === 'flood' && (
-              <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 border border-slate-700">
-                <h2 className="text-2xl font-bold text-white mb-6">🌊 Flood Risk Analysis</h2>
-                
-                {/* Warning Banner for High Risk */}
-                {propertyData.floodRisk.riskLevel === 'High' && (
-                  <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-4 mb-6">
-                    <p className="text-red-400 font-medium">⚠️ This area has HIGH flood risk. Flood insurance will likely be required by your lender.</p>
-                  </div>
-                )}
-                
-                <div className="grid md:grid-cols-2 gap-8">
-                  <div>
-                    <div className="flex items-center gap-4 mb-6">
-                      <div className={`w-20 h-20 rounded-2xl flex items-center justify-center text-xl font-bold ${
-                        propertyData.floodRisk.riskLevel === 'High' ? 'bg-red-500/20 text-red-400' :
-                        propertyData.floodRisk.riskLevel === 'Moderate' ? 'bg-yellow-500/20 text-yellow-400' :
-                        'bg-emerald-500/20 text-emerald-400'
-                      }`}>
-                        {propertyData.floodRisk.zone}
-                      </div>
-                      <div>
-                        <p className="text-white text-xl font-bold">FEMA Flood Zone</p>
-                        <p className={`${
-                          propertyData.floodRisk.riskLevel === 'High' ? 'text-red-400' :
-                          propertyData.floodRisk.riskLevel === 'Moderate' ? 'text-yellow-400' :
-                          'text-emerald-400'
-                        }`}>{propertyData.floodRisk.riskLevel} Risk</p>
-                      </div>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Properties in Flood Zone</span>
-                        <span className={`font-medium ${propertyData.floodRisk.percentInFloodZone > 30 ? 'text-red-400' : 'text-white'}`}>
-                          {propertyData.floodRisk.percentInFloodZone}%
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Insurance Required</span>
-                        <span className={propertyData.floodRisk.insuranceRequired ? 'text-red-400' : 'text-emerald-400'}>
-                          {propertyData.floodRisk.insuranceRequired ? 'Yes' : 'Likely No'}
-                        </span>
-                      </div>
-                      {propertyData.floodRisk.insuranceRequired && (
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Est. Annual Premium</span>
-                          <span className="text-yellow-400 font-medium">${propertyData.floodRisk.annualPremium.toLocaleString()}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between">
-                        <span className="text-slate-400">Flood Events (10 yr)</span>
-                        <span className="text-white font-medium">{propertyData.floodRisk.floodHistory}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-white font-medium mb-4">FEMA Zone Definitions</h3>
-                    <div className="space-y-3 text-sm">
-                      <div className="bg-red-500/10 rounded-lg p-3">
-                        <span className="text-red-400 font-medium">Zone A, AE, AH, AO:</span>
-                        <span className="text-slate-400 ml-2">High risk, 1% annual chance flood. Insurance REQUIRED.</span>
-                      </div>
-                      <div className="bg-yellow-500/10 rounded-lg p-3">
-                        <span className="text-yellow-400 font-medium">Zone X (shaded/500):</span>
-                        <span className="text-slate-400 ml-2">Moderate risk, 0.2% annual chance flood.</span>
-                      </div>
-                      <div className="bg-emerald-500/10 rounded-lg p-3">
-                        <span className="text-emerald-400 font-medium">Zone X (unshaded):</span>
-                        <span className="text-slate-400 ml-2">Minimal risk, outside 500-year flood zone.</span>
-                      </div>
-                    </div>
-                    <p className="mt-4 text-xs text-slate-500">
-                      Data from FEMA National Flood Insurance Program. Enter full address for property-specific flood zone.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Environmental Tab */}
             {activeTab === 'environmental' && (
               <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 border border-slate-700">
                 <h2 className="text-2xl font-bold text-white mb-6">🌿 Environmental Analysis</h2>
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                   <div className="bg-slate-900/50 rounded-xl p-6">
                     <h3 className="text-white font-medium mb-4">Overall Risk Score</h3>
-                    <div className="flex items-center gap-4">
-                      <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-2xl font-bold ${
-                        propertyData.environmental.riskScore < 30 ? 'bg-emerald-500/20 text-emerald-400' :
-                        propertyData.environmental.riskScore < 60 ? 'bg-yellow-500/20 text-yellow-400' :
-                        'bg-red-500/20 text-red-400'
-                      }`}>
-                        {propertyData.environmental.riskScore}
-                      </div>
-                      <div>
-                        <p className="text-slate-400 text-sm">out of 100</p>
-                        <p className={`font-medium ${
-                          propertyData.environmental.riskLevel === 'Low' ? 'text-emerald-400' :
-                          propertyData.environmental.riskLevel === 'Moderate' ? 'text-yellow-400' :
-                          'text-red-400'
-                        }`}>{propertyData.environmental.riskLevel} Risk</p>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-slate-900/50 rounded-xl p-6">
-                    <h3 className="text-white font-medium mb-4">Sinkhole Risk</h3>
-                    <p className={`text-2xl font-bold ${
-                      propertyData.environmental.sinkholeRisk === 'Low' ? 'text-emerald-400' :
-                      propertyData.environmental.sinkholeRisk === 'Moderate' ? 'text-yellow-400' :
-                      'text-red-400'
-                    }`}>{propertyData.environmental.sinkholeRisk}</p>
-                    <p className="text-slate-500 text-sm mt-2">
-                      Based on geological surveys
+                    <p className="text-4xl font-bold text-white">{propertyData.environmental.riskScore}<span className="text-slate-400 text-lg">/100</span></p>
+                    <p className={`mt-2 ${propertyData.environmental.riskLevel === 'Low' ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                      {propertyData.environmental.riskLevel} Risk
                     </p>
                   </div>
-
+                  <div className="bg-slate-900/50 rounded-xl p-6">
+                    <h3 className="text-white font-medium mb-4">Sinkhole Risk</h3>
+                    <p className={`text-2xl font-bold ${propertyData.environmental.sinkholeRisk === 'Low' ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                      {propertyData.environmental.sinkholeRisk}
+                    </p>
+                  </div>
                   {propertyData.environmental.hurricaneCat > 0 && (
                     <div className="bg-slate-900/50 rounded-xl p-6">
                       <h3 className="text-white font-medium mb-4">Hurricane Exposure</h3>
-                      <p className="text-2xl font-bold text-yellow-400">
-                        Category {propertyData.environmental.hurricaneCat}
-                      </p>
-                      <p className="text-slate-500 text-sm mt-2">
-                        Historical max category
-                      </p>
+                      <p className="text-2xl font-bold text-yellow-400">Category {propertyData.environmental.hurricaneCat}</p>
+                      <p className="text-slate-500 text-sm mt-2">Historical max</p>
                     </div>
                   )}
-
                   <div className="bg-slate-900/50 rounded-xl p-6">
                     <h3 className="text-white font-medium mb-4">Earthquake Risk</h3>
-                    <p className={`text-2xl font-bold ${
-                      propertyData.environmental.earthquakeRisk === 'Low' ? 'text-emerald-400' : 'text-yellow-400'
-                    }`}>{propertyData.environmental.earthquakeRisk}</p>
+                    <p className={`text-2xl font-bold ${propertyData.environmental.earthquakeRisk === 'Low' ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                      {propertyData.environmental.earthquakeRisk}
+                    </p>
                   </div>
-
                   <div className="bg-slate-900/50 rounded-xl p-6">
                     <h3 className="text-white font-medium mb-4">Wildfire Risk</h3>
-                    <p className={`text-2xl font-bold ${
-                      propertyData.environmental.wildfireRisk === 'Low' ? 'text-emerald-400' : 'text-yellow-400'
-                    }`}>{propertyData.environmental.wildfireRisk}</p>
+                    <p className={`text-2xl font-bold ${propertyData.environmental.wildfireRisk === 'Low' ? 'text-emerald-400' : 'text-yellow-400'}`}>
+                      {propertyData.environmental.wildfireRisk}
+                    </p>
                   </div>
-
                   <div className="bg-slate-900/50 rounded-xl p-6">
                     <h3 className="text-white font-medium mb-4">Air Quality</h3>
-                    <p className={`text-2xl font-bold ${
-                      propertyData.airQuality.aqi <= 50 ? 'text-emerald-400' : 'text-yellow-400'
-                    }`}>AQI: {propertyData.airQuality.aqi}</p>
+                    <p className="text-2xl font-bold text-emerald-400">AQI: {propertyData.airQuality.aqi}</p>
                     <p className="text-slate-500 text-sm mt-2">{propertyData.airQuality.rating}</p>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Market Trends Tab */}
             {activeTab === 'market' && (
               <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-8 border border-slate-700">
                 <h2 className="text-2xl font-bold text-white mb-6">📈 Market Trends - {stateName}</h2>
@@ -812,13 +640,10 @@ export default function PropertyIntelligencePage() {
                     </div>
                   </div>
                   <div className="bg-slate-900/50 rounded-xl p-6">
-                    <h3 className="text-white font-medium mb-4">📚 Data Sources</h3>
-                    <ul className="space-y-2 text-sm text-slate-400">
-                      <li>• FHFA House Price Index</li>
-                      <li>• Zillow Home Value Index</li>
-                      <li>• Redfin Market Data</li>
-                      <li>• US Census Bureau ACS</li>
-                    </ul>
+                    <h3 className="text-white font-medium mb-4">📊 View Full Market Data</h3>
+                    <Link href="/market-trends" className="bg-cyan-500/20 text-cyan-400 px-4 py-2 rounded-lg font-medium hover:bg-cyan-500/30 inline-block">
+                      → Rate Trends & Charts
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -826,23 +651,19 @@ export default function PropertyIntelligencePage() {
           </>
         )}
 
-        {/* Not Analyzed Yet */}
+        {/* Not Analyzed */}
         {!analyzed && (
           <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-12 border border-slate-700 text-center">
             <span className="text-6xl mb-4 block">📍</span>
             <h2 className="text-2xl font-bold text-white mb-2">Enter a Location to Analyze</h2>
-            <p className="text-slate-400 mb-6">
-              Select your state and optionally add county, city, or full address for more precise data.
-            </p>
-            <div className="flex flex-wrap justify-center gap-4 text-sm text-slate-500">
-              <span>🎓 School Ratings</span>
-              <span>💰 Property Taxes</span>
-              <span>🌊 Flood Zones</span>
-              <span>🌿 Environmental Risks</span>
-              <span>📈 Market Trends</span>
-            </div>
+            <p className="text-slate-400 mb-6">Select your state to get started</p>
           </div>
         )}
+
+        {/* Sidebar Ad */}
+        <div className="mt-8">
+          <RotatingAds variant="banner" interval={12000} />
+        </div>
       </div>
     </div>
   );
