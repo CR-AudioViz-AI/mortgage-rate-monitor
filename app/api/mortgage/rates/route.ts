@@ -7,7 +7,10 @@
 // - FRED Freddie Mac PMMS Weekly (30Y, 15Y)
 // - All REAL data - no calculations!
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
 
 // FRED API configuration
 const FRED_API_KEY = process.env.FRED_API_KEY || 'fc8d5b44ab7b1b7b47da21d2454d0f2a';
