@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="320" height="80" viewBox="0 0 320 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Primary gradient: Emerald → Cyan → Purple -->
+    <linearGradient id="gradientPulse" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="50%" stop-color="#06b6d4"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    
+    <!-- Reverse gradient for pulse ring -->
+    <linearGradient id="gradientPulseReverse" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    
+    <!-- Glow filter -->
+    <filter id="glowEffect" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Icon: Modern geometric lock with gradient rings -->
+  <g transform="translate(8, 8)" filter="url(#glowEffect)">
+    <!-- Outer ring -->
+    <circle cx="32" cy="32" r="30" fill="none" stroke="url(#gradientPulse)" stroke-width="2.5"/>
+    
+    <!-- Inner pulse ring (dashed) -->
+    <circle cx="32" cy="32" r="24" fill="none" stroke="url(#gradientPulseReverse)" stroke-width="1.5" stroke-dasharray="6 3" opacity="0.6"/>
+    
+    <!-- Lock body -->
+    <rect x="20" y="28" width="24" height="20" rx="4" fill="url(#gradientPulse)"/>
+    
+    <!-- Shackle -->
+    <path d="M25 28 L25 22 Q25 14 32 14 Q39 14 39 22 L39 28" 
+          fill="none" stroke="url(#gradientPulse)" stroke-width="4" stroke-linecap="round"/>
+    
+    <!-- Keyhole -->
+    <circle cx="32" cy="36" r="3" fill="#0f172a"/>
+    <rect x="30.5" y="38" width="3" height="5" rx="1" fill="#0f172a"/>
+  </g>
+  
+  <!-- Text: RateUnlock -->
+  <text x="88" y="48" font-family="Outfit, Inter, system-ui, sans-serif" font-size="32" font-weight="700" fill="url(#gradientPulse)">Rate</text>
+  <text x="160" y="48" font-family="Outfit, Inter, system-ui, sans-serif" font-size="32" font-weight="500" fill="white">Unlock</text>
+</svg>
