@@ -1,11 +1,12 @@
-// CR AudioViz AI - Mortgage Rate Monitor
-// Navigation Component with All Tools
-// December 23, 2025
+// RateUnlock - Navigation Component
+// Updated with Gradient Pulse Logo
+// December 24, 2025
 
 'use client';
 
 import { useState } from 'react';
 import Link from 'next/link';
+import RateUnlockLogo from './RateUnlockLogo';
 
 export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -34,13 +35,7 @@ export default function Navigation() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-lg">M</span>
-            </div>
-            <div className="hidden sm:block">
-              <span className="text-white font-bold">Mortgage</span>
-              <span className="text-emerald-400 font-bold ml-1">Monitor</span>
-            </div>
+            <RateUnlockLogo size="md" />
           </Link>
 
           {/* Desktop Nav */}
@@ -126,8 +121,8 @@ export default function Navigation() {
           {/* CTA Button */}
           <div className="flex items-center gap-3">
             <Link href="/true-cost" className="hidden sm:block">
-              <button className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:from-emerald-500 hover:to-teal-500 transition-all">
-                Get Started
+              <button className="bg-gradient-to-r from-emerald-600 via-cyan-600 to-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:from-emerald-500 hover:via-cyan-500 hover:to-violet-500 transition-all shadow-lg shadow-emerald-500/20">
+                Unlock My Rate
               </button>
             </Link>
             
@@ -192,8 +187,8 @@ export default function Navigation() {
               ))}
               <div className="pt-4">
                 <Link href="/true-cost" onClick={() => setMobileMenuOpen(false)}>
-                  <button className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-4 py-3 rounded-lg font-medium">
-                    Get Started Free
+                  <button className="w-full bg-gradient-to-r from-emerald-600 via-cyan-600 to-violet-600 text-white px-4 py-3 rounded-lg font-medium shadow-lg">
+                    Unlock My Rate
                   </button>
                 </Link>
               </div>
