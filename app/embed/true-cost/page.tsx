@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 interface PartnerConfig {
@@ -25,12 +25,12 @@ const DEFAULT_CONFIG: PartnerConfig = {
   leadCapture: true,
 };
 
-export default function EmbedTrueCostPage() {
+function TrueCostCalculator() {
   const searchParams = useSearchParams();
   const partnerId = searchParams.get('partner') || 'rateunlock';
   const theme = searchParams.get('theme') || 'dark';
   
-  const [config, setConfig] = useState<PartnerConfig>(DEFAULT_CONFIG);
+  const [config] = useState<PartnerConfig>(DEFAULT_CONFIG);
   const [homePrice, setHomePrice] = useState(400000);
   const [downPayment, setDownPayment] = useState(80000);
   const [interestRate, setInterestRate] = useState(6.85);
@@ -38,7 +38,7 @@ export default function EmbedTrueCostPage() {
   const [propertyTax, setPropertyTax] = useState(1.2);
   const [insurance, setInsurance] = useState(1200);
   const [hoa, setHoa] = useState(0);
-  const [showLeadCapture, setShowLeadCapture] = useState(false);
+  const [showLeadCapture] = useState(false);
   const [leadEmail, setLeadEmail] = useState('');
   const [leadSubmitted, setLeadSubmitted] = useState(false);
 
@@ -324,7 +324,7 @@ export default function EmbedTrueCostPage() {
           </div>
 
           {/* Lead Capture */}
-          {config.leadCapture && !leadSubmitted && (
+          {config.leadCapture && !leadSubmitted && !showLeadCapture && (
             <div className={`${cardClass} rounded-xl p-6`}>
               <h4 className="font-semibold mb-2">Get Your Full Report</h4>
               <p className={`text-sm ${mutedClass} mb-3`}>
@@ -368,5 +368,25 @@ export default function EmbedTrueCostPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+// Loading fallback
+function LoadingFallback() {
+  return (
+    <div className="bg-slate-900 text-white min-h-screen p-4 flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-slate-400">Loading calculator...</p>
+      </div>
+    </div>
+  );
+}
+
+export default function EmbedTrueCostPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <TrueCostCalculator />
+    </Suspense>
   );
 }
