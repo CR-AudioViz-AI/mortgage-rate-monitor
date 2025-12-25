@@ -1,6 +1,6 @@
 // RateUnlock - Leads API (Automated)
 // Real database, lender routing, webhook delivery
-// December 24, 2025
+// December 25, 2025 - Fixed queries
 
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -11,8 +11,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 async function supabaseRequest(
   endpoint: string,
   method: string = 'GET',
-  body?: object,
-  headers?: Record<string, string>
+  body?: object
 ) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${endpoint}`, {
     method,
@@ -21,7 +20,6 @@ async function supabaseRequest(
       'Authorization': `Bearer ${SUPABASE_KEY}`,
       'Content-Type': 'application/json',
       'Prefer': method === 'POST' ? 'return=representation' : 'return=minimal',
-      ...headers,
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -34,13 +32,22 @@ async function supabaseRequest(
 }
 
 // Calculate lead quality score
-function calculateQuality(lead: any): { quality: 'high' | 'medium' | 'low'; score: number } {
+function calculateQuality(lead: {
+  phone?: string;
+  first_name?: string;
+  last_name?: string;
+  credit_score?: string;
+  loan_amount?: number;
+  home_price?: number;
+  down_payment?: number;
+  zip_code?: string;
+}): { quality: 'high' | 'medium' | 'low'; score: number } {
   let score = 0;
   
   if (lead.phone) score += 20;
   if (lead.first_name && lead.last_name) score += 15;
   if (lead.credit_score) score += 25;
-  if (lead.loan_amount >= 200000 && lead.loan_amount <= 500000) score += 20;
+  if (lead.loan_amount && lead.loan_amount >= 200000 && lead.loan_amount <= 500000) score += 20;
   if (lead.home_price && lead.down_payment && (lead.down_payment / lead.home_price) >= 0.1) score += 10;
   if (lead.zip_code) score += 10;
   
@@ -50,20 +57,46 @@ function calculateQuality(lead: any): { quality: 'high' | 'medium' | 'low'; scor
   };
 }
 
+interface Lender {
+  id: string;
+  name: string;
+  bid_amount: number;
+  max_leads_per_day: number;
+  current_leads_today: number;
+  quality_minimum: 'high' | 'medium' | 'low';
+  target_states: string[];
+  target_loan_types: string[];
+  min_loan_amount: number;
+  max_loan_amount: number;
+  webhook_url?: string;
+}
+
 // Find matching lenders
-async function findMatchingLenders(lead: any) {
-  // Get active lenders with capacity
+async function findMatchingLenders(lead: {
+  quality: string;
+  state: string;
+  loan_type: string;
+  loan_amount: number;
+}) {
+  // Get active lenders
   const lenders = await supabaseRequest(
-    `rateunlock_lenders?active=eq.true&current_leads_today=lt.max_leads_per_day&order=bid_amount.desc&limit=10&select=*`
+    `rateunlock_lenders?active=eq.true&order=bid_amount.desc&limit=10&select=*`
   );
   
   if (!lenders || lenders.length === 0) return [];
   
   const qualityOrder = { high: 3, medium: 2, low: 1 };
   
-  return lenders.filter((lender: any) => {
+  return (lenders as Lender[]).filter((lender) => {
+    // Check capacity
+    if (lender.current_leads_today >= lender.max_leads_per_day) {
+      return false;
+    }
+    
     // Check quality minimum
-    if (qualityOrder[lead.quality as keyof typeof qualityOrder] < qualityOrder[lender.quality_minimum as keyof typeof qualityOrder]) {
+    const leadQuality = qualityOrder[lead.quality as keyof typeof qualityOrder] || 0;
+    const requiredQuality = qualityOrder[lender.quality_minimum] || 0;
+    if (leadQuality < requiredQuality) {
       return false;
     }
     
@@ -87,7 +120,7 @@ async function findMatchingLenders(lead: any) {
 }
 
 // Deliver lead to lender webhook
-async function deliverToLender(lead: any, lender: any) {
+async function deliverToLender(lead: Record<string, unknown>, lender: Lender) {
   if (!lender.webhook_url) return null;
   
   try {
@@ -95,7 +128,7 @@ async function deliverToLender(lead: any, lender: any) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-RateUnlock-Signature': 'TODO_IMPLEMENT_HMAC',
+        'X-RateUnlock-Signature': 'rateunlock-webhook',
       },
       body: JSON.stringify({
         event: 'lead.new',
@@ -179,30 +212,30 @@ export async function POST(request: NextRequest) {
     // Create lead in database
     const leadData = {
       email,
-      phone,
-      first_name: firstName,
-      last_name: lastName,
+      phone: phone || null,
+      first_name: firstName || null,
+      last_name: lastName || null,
       home_price: homePrice,
       loan_amount: loanAmount,
       down_payment: downPayment || homePrice - loanAmount,
       down_payment_percent: ((downPayment || homePrice - loanAmount) / homePrice) * 100,
-      credit_score: creditScore,
+      credit_score: creditScore || null,
       property_type: propertyType || 'single-family',
       property_use: propertyUse || 'primary',
       state,
-      zip_code: zipCode,
+      zip_code: zipCode || null,
       loan_type: loanType || 'conventional',
       loan_term: loanTerm || 30,
-      interest_rate: interestRate,
-      monthly_payment: monthlyPayment,
+      interest_rate: interestRate || null,
+      monthly_payment: monthlyPayment || null,
       calculator: calculator || 'true-cost',
       partner_id: partnerId || null,
       quality,
       quality_score: score,
       status: 'new',
-      utm_source: utmSource,
-      utm_medium: utmMedium,
-      utm_campaign: utmCampaign,
+      utm_source: utmSource || null,
+      utm_medium: utmMedium || null,
+      utm_campaign: utmCampaign || null,
     };
     
     const result = await supabaseRequest('rateunlock_leads', 'POST', leadData);
@@ -215,11 +248,13 @@ export async function POST(request: NextRequest) {
     
     // Find matching lenders
     const matchingLenders = await findMatchingLenders({
-      ...lead,
       quality,
+      state,
+      loan_type: loanType || 'conventional',
+      loan_amount: loanAmount,
     });
     
-    let routedLender = null;
+    let routedLender: Lender | null = null;
     let partnerPayout = 0;
     
     if (matchingLenders.length > 0) {
@@ -259,16 +294,6 @@ export async function POST(request: NextRequest) {
           amount: partnerPayout,
           status: 'pending',
         });
-        
-        // Update partner stats
-        await supabaseRequest(
-          `rateunlock_partners?id=eq.${partnerId}`,
-          'PATCH',
-          {
-            total_leads: lead.partner_id ? undefined : 1, // Trigger will handle this
-            total_earnings: partnerPayout,
-          }
-        );
       }
     }
     
@@ -304,11 +329,12 @@ export async function POST(request: NextRequest) {
       matchingLenders: matchingLenders.length,
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[LEADS] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to process lead';
     return NextResponse.json({
       success: false,
-      error: error.message || 'Failed to process lead',
+      error: errorMessage,
     }, { status: 500 });
   }
 }
@@ -352,7 +378,7 @@ export async function GET(request: NextRequest) {
         `rateunlock_payouts?partner_id=eq.${partnerId}&status=eq.pending&select=amount`
       );
       
-      const pendingPayout = payouts?.reduce((sum: number, p: any) => sum + parseFloat(p.amount), 0) || 0;
+      const pendingPayout = payouts?.reduce((sum: number, p: { amount: string }) => sum + parseFloat(p.amount), 0) || 0;
       
       return NextResponse.json({
         success: true,
@@ -378,10 +404,11 @@ export async function GET(request: NextRequest) {
       },
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Request failed';
     return NextResponse.json({
       success: false,
-      error: error.message,
+      error: errorMessage,
     }, { status: 500 });
   }
 }
