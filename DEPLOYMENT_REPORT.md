@@ -108,7 +108,7 @@ Test it now! The platform is building and will be live in ~2 minutes.
 - Marketing Dashboard
 - Legal AI Assistant
 - Market Oracle
-- CRAIverse Access
+- Javariverse Access
 
 ### **6. New Homepage** ✓
 **File:** `app/page.tsx`

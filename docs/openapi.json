@@ -396,7 +396,7 @@
         "type": "apiKey",
         "in": "header",
         "name": "X-API-Key",
-        "description": "API key for programmatic access. Format: crav_mortgage_xxxxx"
+        "description": "API key for programmatic access. Format: javari_mortgage_xxxxx"
       },
       "BearerAuth": {
         "type": "http",

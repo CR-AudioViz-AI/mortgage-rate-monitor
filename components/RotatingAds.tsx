@@ -95,12 +95,12 @@ const CR_PRODUCTS: Ad[] = [
     color: 'from-pink-600 to-rose-600',
   },
   {
-    id: 'crav-cards',
-    title: 'CravCards',
+    id: 'javari-cards',
+    title: 'Javari Cards',
     description: 'AI-powered credit card recommendations based on your spending habits.',
     icon: '💳',
     cta: 'Find Best Card',
-    href: 'https://cravcards.com',
+    href: 'https://javaricards.com',
     color: 'from-slate-600 to-zinc-600',
   },
   {

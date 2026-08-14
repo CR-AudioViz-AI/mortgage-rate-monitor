@@ -310,7 +310,7 @@ CREATE INDEX idx_rate_history_type_term ON rate_history(loan_type, term);
 -- Users
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_type ON users(user_type);
-CREATE INDEX idx_users_crav_id ON users(craudioviz_user_id);
+CREATE INDEX idx_users_javari_id ON users(craudioviz_user_id);
 
 -- Lead Submissions
 CREATE INDEX idx_leads_status ON lead_submissions(status);

@@ -14,7 +14,7 @@ const supabase = createClient(
 
 // Generate secure API key
 function generateApiKey(): string {
-  const prefix = 'crav_mortgage';
+  const prefix = 'javari_mortgage';
   const randomBytes = crypto.randomBytes(32).toString('hex');
   return `${prefix}_${randomBytes}`;
 }
