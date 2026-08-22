@@ -27,7 +27,7 @@ async function sendConfirmationEmail(to: string, alert: { rateType: string; targ
     fiveOneArm: '5/1 ARM'
   };
 
-  await fetch('https://api.resend.com/emails', {
+  const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${RESEND_API_KEY}`,
@@ -56,6 +56,13 @@ async function sendConfirmationEmail(to: string, alert: { rateType: string; targ
       `
     })
   });
+
+  // 2026-08-21: the response was discarded. fetch does NOT throw on 4xx or 5xx,
+  // so a Resend rejection - bad address, rate limit, suspended account - looked
+  // exactly like a delivered confirmation.
+  if (!res.ok) {
+    throw new Error(`Resend ${res.status}: ${(await res.text()).slice(0, 160)}`);
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -98,7 +105,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Send confirmation email
-    await sendConfirmationEmail(email, alert);
+    // 2026-08-21: this was awaited bare inside the outer try. The alert is ALREADY
+    // marked verified by this point, so a failure sending the CONFIRMATION threw to
+    // the catch below and redirected the user to ?error=server_error - telling
+    // someone their verification failed when it had actually succeeded.
+    //
+    // The confirmation is a courtesy; the verification is the outcome. A failed
+    // courtesy must not report the outcome as failed.
+    try {
+      await sendConfirmationEmail(email, alert);
+    } catch (mailErr) {
+      console.error('Verified successfully, but the confirmation email failed:', mailErr);
+    }
 
     return NextResponse.redirect(new URL('/alerts?status=verified', APP_URL));
 
